@@ -65,33 +65,42 @@ get_igraph <- function(res_fgsea, simmat,leading_edge_list,
 
 
 #plot the graphs
-add_category_nodes <- function(p,col.var) {
+add_category_nodes <- function(p,col.var,cols=cols) {
+  locol=cols[1]
+  midcol=ifelse(length(cols==3),cols[2],NULL)
+  hicol=cols[-1]
   
-  p<-p + ggnewscale::new_scale_fill() +
-    geom_point(shape = 21, aes_(x =~ x, y =~ y, fill =~ colvar,
+  p<-p + ggnewscale::new_scale_fill() +geom_point(shape = 21, aes_(x =~ x, y =~ y, fill =~ colvar,
                                 size =~ size)) +
     scale_size_continuous(name = "number of genes",
-                          range = c(3, 8) ) +
-    scale_fill_continuous(low = "blue", high = "red",name=col.var,
-                          guide = guide_colorbar()) + 
-    theme(legend.title = element_text(size = 10),
+                          range = c(3, 8) )
+  
+  if(!is.null(midcol))p<-p+scale_fill_gradient2(low = locol,mid=midcol, high = hicol,name=col.var,
+                                               guide = guide_colorbar()) 
+  else p<-p+scale_fill_continuous(low = locol, high = hicol,name=col.var,
+                                 guide = guide_colorbar())
+  
+  p<-p+theme(legend.title = element_text(size = 10),
           legend.text  = element_text(size = 10)) +
     theme(panel.background = element_blank()) 
   return(p)
 }
-add_node_label <- function(p) {
+add_node_label <- function(p,label.size=label.size) {
   
   p <- p + geom_node_text(aes_(label=~name),
-                          size = 2.5, repel=TRUE)
+                          size = label.size, repel=TRUE)
   
   return(p)
 }
 
 #main function####
 emmaplot<-function(res_fgsea,
-                   pathway_names, 
+                   pathway_names=NULL, 
                    col.var="NES",
-                   min_edge=0.2){
+                   min_edge=0.2,
+                   label.size=2.5,
+                   cols=c('blue','red')){
+  if(is.null(pathway_names))pathway_names=res_fgsea[order(pval)]$pathway
   
   lelist<-LeadingEdges(res_fgsea)
   
@@ -112,10 +121,10 @@ emmaplot<-function(res_fgsea,
   p <- p + geom_edge_link(alpha=.8, aes_(width=~I(width)),
                           colour='darkgrey')
   ## add dot
-  p <- add_category_nodes(p = p,col.var =col.var)
+  p <- add_category_nodes(p = p,col.var =col.var,cols=cols)
   ## add node label
   
-  p <- add_node_label(p = p)
+  p <- add_node_label(p = p,label.size=label.size)
   
   
   return(p)
