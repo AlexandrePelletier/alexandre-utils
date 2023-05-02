@@ -1,4 +1,6 @@
+#R utils packages and functions for every project
 
+#constantly used packages####
 library("data.table")
 setDTthreads(threads = 0)
 getDTthreads() #28
@@ -8,6 +10,10 @@ library("ggplot2")
 library("ggrepel")
 library("patchwork")
 library("here")
+
+
+#r basic utils functions
+
 fp<-function(...)file.path(...)
 
 ps<-function(...,sep="",collapse = NULL)paste(...,sep=sep,collapse = collapse)
@@ -48,7 +54,12 @@ bed_inter<- function(a, b, opt1="-wa", opt2="-wb",out_dir=".", select=NULL, col.
   }
 }
 
+#GGPLOT####
 
+bar_bw<-function()scale_fill_manual(values=c('black','grey'))
+bar_rb<-function(invert=FALSE)ifelse(invert,return(scale_fill_manual(values=c('royalblue3','orangered3'))),return(scale_fill_manual(values=c('orangered3','royalblue3'))))
+
+#BIOMART####
 
 
 GetMartGenes<-function()biomaRt::useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
