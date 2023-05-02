@@ -3,17 +3,26 @@
 require("devtools")
 devtools::install_github("ctlab/fgsea")
 
+
+
 #analysis
 library(fgsea)
 library(data.table)
+
+
 
 pathways_dir<-'/projectnb/tcwlab/MSigDB/' #folder containing all  reference pathways files in gmt format can be obtained at: https://drive.google.com/drive/folders/1-9CxYMLg7UBhzwigAIN8ACd8sDnHxUzE?usp=sharing
 
 diffexp_file_path<-"/projectnb/tcwlab/LabMember/adpelle1/projects/juao_autophagy/outputs/1-APOE4_astro_human/res_pseudobulkDESeq2_Dementia_APOE4_vs_3_astro_Cov_braak_stage_sex_PMI_age_education_avg.mt.csv.gz"
 
-pathways_to_test<-c("GO_all", "GO_bp", "GO_cc", "GO_mf", "CP_biocarta", "CP_kegg", "CP_reactome", "CP_pid") # choose pathway gene sets reference you want to test or let like that test for all
+pathways_to_test<-c("GO_all", "GO_bp", "GO_cc", "GO_mf", 'CP_all',"CP_biocarta", "CP_kegg", "CP_reactome", "CP_pid") # choose pathway gene sets reference you want to test or let like that test for all
 
-
+GenesInPathways<-function(pathways,source,path_to_pathways_dir=pathways_dir){
+  #return list of genes for each pathway
+  gmt_mtd<-fread(file.path(path_to_pathways_dir,'gmt_metadata.csv')) 
+  
+  return(gmtPathways(file.path(path_to_pathways_dir,  gmt_mtd[name==source]$gmt))[pathways])
+}
 
 #calculate your gene stats
 res_diffexp<-fread(diffexp_file_path)
@@ -34,7 +43,7 @@ res_gsea<-Reduce(rbind,lapply(pathways_to_test, function(p){
   pathways<- gmtPathways(file.path(pathways_dir,gmt_mtd[name==p]$gmt))
   
   res<-fgsea(pathways,
-             stats=gene_stats,minSize=10,maxSize=2000,scoreType='std',nPermSimple = 1000000)
+             stats=gene_stats,minSize=10,maxSize=2000,scoreType='std',eps=0)
   
   return(res[,source:=p])
   
@@ -59,7 +68,7 @@ topPathwaysUp <- res_gsea[source==pathways_to_visualize][ES > 0][head(order(pval
 topPathwaysDown <- res_gsea[source==pathways_to_visualize][ES < 0][head(order(pval), n=10), pathway] 
 
 topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
-plotGseaTable(pathways[topPathways], gene_stats, res_gsea[source==pathways_to_visualize], gseaParam = 0.5, colwidths = c(20, 6, 2, 2, 2))
+plotGseaTable(GenesInPathways(topPathways,pathways_to_visualize), gene_stats, res_gsea[source==pathways_to_visualize], gseaParam = 0.5, colwidths = c(20, 6, 2, 2, 2))
 
 
 

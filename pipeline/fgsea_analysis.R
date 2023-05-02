@@ -11,7 +11,7 @@ pathways_dir<-'path/to/gmt_directory' #folder containing all  reference pathways
 
 diffexp_file_path<-"path/to/your_differential_expression_results_file.csv"
 
-pathways_to_test<-c("GO_all", "GO_bp", "GO_cc", "GO_mf", "CP_biocarta", "CP_kegg", "CP_reactome", "CP_pid") # choose pathway gene sets reference you want to test or let like that to test for all
+pathways_to_test<-c("GO_all", "GO_bp", "GO_cc", "GO_mf", 'CP_all',"CP_biocarta", "CP_kegg", "CP_reactome", "CP_pid") # choose pathway gene sets reference you want to test or let like that to test for all
 
 
 #some useful function
