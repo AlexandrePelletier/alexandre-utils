@@ -12,7 +12,7 @@ library("patchwork")
 library("here")
 
 
-#r basic utils functions
+#r basic utils functions####
 
 fp<-function(...)file.path(...)
 
@@ -400,6 +400,11 @@ FindGO_ID<-function(term_descriptions){
   ids<-names(terms)[match(term_descriptions,unlist(terms))]
   return(ids)
 }
+
+
+#ENRICHMENT/FGSEA
+removeRefKey<-function(term_names)str_remove(str_remove(term_names,'GOBP|GOCC|GOMF|KEGG|NABA|REACTOME|WP|BIOCARTA|PID'),'_')
+
 
 ####Signac####
 GetMotifIDs<-function(object,motif.names,assay=NULL,return_dt=FALSE){
