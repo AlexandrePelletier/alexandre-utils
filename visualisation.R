@@ -40,7 +40,7 @@ get_similarity_matrix <- function(leading_edge_list) {
 # get graph of sim
 get_igraph <- function(res_fgsea, simmat,leading_edge_list,
                        pathway_names, col.var, min_edge) {
-
+  if(any(duplicated(res_fgsea$pathway)))stop('error: duplicated pathways')
   
   wd <- reshape2::melt(simmat[pathway_names,pathway_names])
   wd <- wd[wd[,1] != wd[,2],]
@@ -50,16 +50,22 @@ get_igraph <- function(res_fgsea, simmat,leading_edge_list,
   g <- graph.data.frame(wd[, -3], directed=FALSE)
   E(g)$width <- sqrt(wd[, 3] * 5) 
   
+  
+  
   # Use similarity as the weight(length) of an edge
   E(g)$weight <- wd[, 3]
   g <- delete.edges(g, E(g)[wd[, 3] < min_edge])
-  idx <- unlist(sapply(V(g)$name, function(x) which(x == res_fgsea$pathway)))
-  cnt <- sapply(leading_edge_list[idx], length)
   
-  V(g)$size <- cnt
-  
-  colVar <- as.numeric(as.vector(res_fgsea[idx, ..col.var][[1]]))
-  V(g)$colvar <- colVar
+  res_fgseaf<-res_fgsea[V(g)$name,on='pathway']
+  #idx <- unlist(sapply(V(g)$name, function(x) which(x == res_fgseaf$pathway)))
+  cnt <- sapply(leading_edge_list, length)
+
+  V(g)$size <- cnt[V(g)$name]
+
+  colVar <- as.numeric(as.vector(res_fgseaf[V(g)$name, on='pathway'][,.SD,.SDcols=col.var][[1]]))
+
+    V(g)$colvar <- colVar
+
   return(g)
 }
 
