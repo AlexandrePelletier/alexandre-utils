@@ -402,8 +402,6 @@ FindGO_ID<-function(term_descriptions){
 }
 
 
-#ENRICHMENT/FGSEA
-removeRefKey<-function(term_names)str_remove(str_remove(term_names,'GOBP|GOCC|GOMF|KEGG|NABA|REACTOME|WP|BIOCARTA|PID'),'_')
 
 
 ####Signac####
@@ -555,14 +553,6 @@ TFsMotifPlot<-function(object,region,motif.names,assay=NULL,size=2,alpha=1,pad=0
 }
 
 
-pctPC<-function(pca,rngPCs="all"){
-  if(is.character(rngPCs)){
-    rngPCs<-1:length(pca$sdev)
-  }
-  pct.varPCs<-pca$sdev[rngPCs]^2/sum(pca$sdev^2)
-  names(pct.varPCs)<-paste0('PC',rngPCs)
-  return( pct.varPCs)
-}
 
 str_to_vec<-function(ids_sepBySlash,sep="/")as.vector(strsplit(ids_sepBySlash,sep)[[1]])
 

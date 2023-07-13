@@ -1,4 +1,10 @@
 
+#visualisation package
+library(pheatmap)
+
+#FGSEA RESULTS####
+removeRefKey<-function(term_names)str_remove(str_remove(term_names,'GOBP|GOCC|GOMF|KEGG|NABA|REACTOME|WP|BIOCARTA|PID'),'_')
+
 #EMMAPLOT####
 
 {
@@ -91,10 +97,11 @@ add_category_nodes <- function(p,col.var,cols=cols) {
     theme(panel.background = element_blank()) 
   return(p)
 }
-add_node_label <- function(p,label.size=label.size) {
+add_node_label <- function(p,label.size=label.size,max.overlaps=10) {
   
   p <- p + geom_node_text(aes_(label=~name),
-                          size = label.size, repel=TRUE)
+                          size = label.size, repel=TRUE,
+                          max.overlaps=max.overlaps)
   
   return(p)
 }
@@ -105,7 +112,8 @@ emmaplot<-function(res_fgsea,
                    col.var="NES",
                    min_edge=0.2,
                    label.size=2.5,
-                   cols=c('blue','red')){
+                   cols=c('blue','white','red'),
+                   max.overlaps=10){
   if(is.null(pathway_names))pathway_names=res_fgsea[order(pval)]$pathway
   
   lelist<-LeadingEdges(res_fgsea)
@@ -130,7 +138,7 @@ emmaplot<-function(res_fgsea,
   p <- add_category_nodes(p = p,col.var =col.var,cols=cols)
   ## add node label
   
-  p <- add_node_label(p = p,label.size=label.size)
+  p <- add_node_label(p = p,label.size=label.size,max.overlaps=max.overlaps)
   
   
   return(p)
@@ -143,3 +151,61 @@ emmaplot<-function(res_fgsea,
 }
 
 
+
+
+#HEATMAPs comparing pathhways
+
+CompPathways<-function(res_gsea,group.by,rm.refkey=TRUE,save.pdf=NULL,width =7,height = 7){
+  require('pheatmap')
+  require('data.table')
+  
+  res_gsea1<-copy(res_gsea)
+  
+  res_gsea1[,comparison:=.SD,.SDcols=group.by]
+  
+  if(rm.refkey)
+    res_gsea1[,pathw:=removeRefKey(pathway)]
+  else
+    res_gsea1[,pathw:=pathway]
+  
+    mat_gsea<-data.frame(dcast(res_gsea1,
+                             pathw~comparison,value.var ='NES'),row.names = 'pathw')
+  
+  
+  #add pvalue
+  res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<0.05,'*','')))]
+
+  mat_gseap<-data.frame(dcast(res_gsea1,pathw~comparison,value.var ='padjsig'),row.names = 'pathw')
+  
+  col_breaks<-c((-30:30)/10)
+  col_breaks<-col_breaks[col_breaks>0.5|col_breaks<(-0.5)]
+  
+  if(!is.null(save.pdf)){
+    pdf(fp(out,save.pdf),width =7,height = 7)
+    print(pheatmap(mat_gsea,
+                   breaks =col_breaks,
+                   color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
+                                                                         "RdBu")))(length(col_breaks)-1),
+                   fontsize_row = 7,
+                   main='NES',
+                   display_numbers = mat_gseap[rownames(mat_gsea),colnames(mat_gsea)],
+                   cluster_cols = T,
+                   cellwidth =16,
+                   
+                   fontsize_number = 10))
+    
+    dev.off()
+  }
+  return(pheatmap(mat_gsea,
+                 breaks =col_breaks,
+                 color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
+                                                                       "RdBu")))(length(col_breaks)-1),
+                 fontsize_row = 7,
+                 main='NES',
+                 display_numbers = mat_gseap[rownames(mat_gsea),colnames(mat_gsea)],
+                 cluster_cols = T,
+                 cellwidth =16,
+                 
+                 fontsize_number = 10))
+  
+}
