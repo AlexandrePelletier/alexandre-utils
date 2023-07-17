@@ -3,7 +3,7 @@
 #constantly used packages####
 library("data.table")
 setDTthreads(threads = 0)
-getDTthreads() #28
+message(getDTthreads(),' threads available for data.table')
 
 library("stringr")
 library("ggplot2")

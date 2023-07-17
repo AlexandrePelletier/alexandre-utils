@@ -1,6 +1,14 @@
 #ALL PCA BASED ANALYSIS UTILITIES
 
 
+RunPca<-function(norm_mat,features=NULL,scale=TRUE){
+    norm_matf<-norm_mat[rowSums(is.na(norm_mat))==0,]
+    norm_matf<-norm_matf[which(apply(norm_matf, 1, var)!=0),]
+    message('removing ',nrow(norm_mat)-nrow(norm_matf),' features (',nrow(norm_matf), 'remaining) because missing value or without variance')
+    return(prcomp(t(norm_matf),scale.=scale))
+    
+}
+
 pctPC<-function(pca,rngPCs="all"){
   if(is.character(rngPCs)){
     rngPCs<-1:length(pca$sdev)
@@ -8,6 +16,30 @@ pctPC<-function(pca,rngPCs="all"){
   pct.varPCs<-pca$sdev[rngPCs]^2/sum(pca$sdev^2)
   names(pct.varPCs)<-paste0('PC',rngPCs)
   return( pct.varPCs)
+}
+
+PcaPlot<-function(pca,mtd,group.by, pc_x='PC1', pc_y='PC2',sample_col='sample_id',scale=TRUE,return_pcs_mtd=FALSE){
+  
+  pca_dt<-merge(data.table(pca$x,keep.rownames = sample_col),mtd)
+  
+  pctpcs<-pctPC(pca)
+  
+  ps<-lapply(group.by, function(c){
+    p<-ggplot(pca_dt)+geom_point(aes_string(x=pc_x,y=pc_y,col=c))+
+      labs(x=paste0(pc_x,' (',round(pctpcs[pc_x]*100),'%)'),
+           y=paste0(pc_y,' (',round(pctpcs[pc_y]*100),'%)'))+
+      theme_bw()
+    return(p+ggtitle(c))
+  })
+  
+  
+  if(return_pcs_mtd){
+    print(wrap_plots(ps))
+    return(pca_dt)
+  }
+  else{
+    return(wrap_plots(ps))
+  }
 }
 
 
@@ -18,61 +50,70 @@ CorrelCovarPCs<-function(pca,mtd,sample_col='sample',vars_num=NULL,vars_fac=NULL
   pcs<-data.frame(pca$x)
   names(rngPCs)<-paste0('PC',rngPCs)
   
-  if(is.null(vars_num))vars_num=colnames(mtd)[sapply(mtd, is.numeric)]
-  if(is.null(vars_fac))vars_fac=colnames(mtd)[!sapply(mtd, is.numeric)&colnames(mtd)!=sample_col]
+  #if(is.null(vars_num))vars_num=colnames(mtd)[sapply(mtd, is.numeric)]
+  #if(is.null(vars_fac))vars_fac=colnames(mtd)[!sapply(mtd, is.numeric)&colnames(mtd)!=sample_col]
   
-  mtd[,(vars_fac):=lapply(.SD,as.factor),.SDcols=vars_fac]
   
   if(is.data.table(mtd)){
+    mtd[,(vars_fac):=lapply(.SD,as.factor),.SDcols=vars_fac]
+    
     mtd<-data.frame(mtd,row.names = sample_col)
   }
   
-  mtd_num=mtd[rownames(pcs),vars_num]
-  mtd_fac=mtd[rownames(pcs),vars_fac]
-  
-  mtd_fac<-mtd_fac[,sapply(mtd_fac, function(x)length(levels(x))>1)]
-  
-  mtd_num=t(mtd_num)
-  mtd_fac=t(mtd_fac)
-  
-  split_num=split(mtd_num,rownames(mtd_num))
-  
-  split_fac=split(mtd_fac,rownames(mtd_fac))
-  
-  res_num=lapply(split_num,function(x,ret=res){
-    FAC1.p<-rep(0,length(rngPCs))
-    FAC1.r2<-rep(0,length(rngPCs))
-    for (i in rngPCs){
-      FAC1<-as.numeric(x)
-      FAC1<-lm(pcs[,i]~FAC1)
-      FAC1.p[i]<-anova(FAC1)$Pr[1]
-      FAC1.r2[i]<-summary(FAC1)$adj.r.squared
-    }
-    if(ret=="pval"){
-      return(FAC1.p)
-    }else if(ret=="r2"){
-      return(FAC1.r2)
-    }
-  })
-  
-  res_fac=lapply(split_fac,function(x,ret=res){
-    FAC1.p<-rep(0,length(rngPCs))
-    FAC1.r2<-rep(0,length(rngPCs))
-    for (i in rngPCs){
-      FAC1<-as.factor(x)
-      FAC1<-lm(pcs[,i]~FAC1)
-      FAC1.p[i]<- anova(FAC1)$Pr[1]
-      FAC1.r2[i]<-summary(FAC1)$adj.r.squared
-    }
-    if(ret=="pval"){
-      return(FAC1.p)
-    }else if(ret=="r2"){
-      return(FAC1.r2)
-    }})
+  if(length(vars_num)>0){
+    mtd_num=mtd[rownames(pcs),vars_num]
+    mtd_num=t(mtd_num)
+    split_num=split(mtd_num,rownames(mtd_num))
+    res_num=lapply(split_num,function(x,ret=res){
+      FAC1.p<-rep(0,length(rngPCs))
+      FAC1.r2<-rep(0,length(rngPCs))
+      for (i in rngPCs){
+        FAC1<-as.numeric(x)
+        FAC1<-lm(pcs[,i]~FAC1)
+        FAC1.p[i]<-anova(FAC1)$Pr[1]
+        FAC1.r2[i]<-summary(FAC1)$adj.r.squared
+      }
+      if(ret=="pval"){
+        return(FAC1.p)
+      }else if(ret=="r2"){
+        return(FAC1.r2)
+      }
+    })
+    
+    res.num<-do.call(rbind,res_num)
+    
+  }else{
+    res.num<-data.frame()
+  }
   
   
-  res.num<-do.call(rbind,res_num)
-  res.fac<-do.call(rbind,res_fac)
+  if(length(vars_fac)>0){
+    mtd_fac=mtd[rownames(pcs),vars_fac]
+    
+    mtd_fac<-mtd_fac[,sapply(mtd_fac, function(x)length(levels(x))>1)]
+    mtd_fac=t(mtd_fac)
+    split_fac=split(mtd_fac,rownames(mtd_fac))
+    res_fac=lapply(split_fac,function(x,ret=res){
+      FAC1.p<-rep(0,length(rngPCs))
+      FAC1.r2<-rep(0,length(rngPCs))
+      for (i in rngPCs){
+        FAC1<-as.factor(x)
+        FAC1<-lm(pcs[,i]~FAC1)
+        FAC1.p[i]<- anova(FAC1)$Pr[1]
+        FAC1.r2[i]<-summary(FAC1)$adj.r.squared
+      }
+      if(ret=="pval"){
+        return(FAC1.p)
+      }else if(ret=="r2"){
+        return(FAC1.r2)
+      }})
+    res.fac<-do.call(rbind,res_fac)
+    
+  }else{
+    res.fac<-data.frame()
+    
+  }
+  
   final_res<-rbind(res.num,res.fac)
   final_res<-data.matrix(final_res)
   if(plot){
