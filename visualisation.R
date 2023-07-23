@@ -209,3 +209,56 @@ CompPathways<-function(res_gsea,group.by,rm.refkey=TRUE,save.pdf=NULL,width =7,h
                  fontsize_number = 10))
   
 }
+
+CompDEGsPathways<-function(res_gsea,
+                           res_de,
+                           top.n=NULL,
+                           FC_col='log2FoldChange',
+                           pval_col='padj',col_range=c(-2.5,2.5),transpose=FALSE){
+  
+  
+  #get leading edges
+  degs_list<-LeadingEdges(res_gsea)
+  
+  #filter degs
+  if(!is.null(top.n))
+    degs_list<-lapply(degs_list, function(x)head(x,top.n))
+  
+  #trans in dataframe
+  degs_pathways<-Reduce(rbind,lapply(names(degs_list),function(p)data.table(pathway=p,
+                                                                            gene=degs_list[[p]])))
+  
+  
+  #merge pathway by degs
+  res_de_p<-merge(res_de,degs_pathways,by='gene')
+  
+  #create heatmaps
+  dep_mat<-data.frame(dcast(res_de_p,gene~pathway,value.var =FC_col),row.names = 'gene')
+  dep_mat[is.na(dep_mat)]<-0
+  
+  #add pvalue
+  res_de_p[,padjsig:=lapply(.SD,function(x)ifelse(x<0.001,'***',ifelse(x<0.01,'**',ifelse(x<0.05,'*','')))),.SDcols=pval_col]
+  
+  dep_matp<-data.frame(dcast(res_de_p,gene~pathway,value.var ='padjsig'),row.names = 'gene')
+  dep_matp[is.na(dep_matp)]<-''
+  
+  #plot heatmap
+  if (transpose) {
+    dep_matp<-t(dep_matp)
+    dep_mat<-t(dep_mat)
+    
+  }
+  col_breaks<-c(((col_range[1]*10):(col_range[2]*10))/10)
+  print(pheatmap(dep_mat,
+                 breaks =col_breaks,
+                 color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
+                                                                       "RdBu")))(length(col_breaks)-1),
+                 fontsize= 7,
+                 main='Top DEGs',
+                 display_numbers = dep_matp,
+                 # cellwidth =20,
+                 # cellheight =  8,
+                 
+                 fontsize_number = 8))
+  
+} 
