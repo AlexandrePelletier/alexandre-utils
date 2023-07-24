@@ -214,7 +214,11 @@ CompDEGsPathways<-function(res_gsea,
                            res_de,
                            top.n=NULL,
                            FC_col='log2FoldChange',
-                           pval_col='padj',col_range=c(-2.5,2.5),transpose=FALSE){
+                           pval_col='padj',
+                           col_range=c(-2.5,2.5),
+                           transpose=FALSE,
+                           show_rownames=FALSE,
+                           show_pval=TRUE){
   
   
   #get leading edges
@@ -231,34 +235,55 @@ CompDEGsPathways<-function(res_gsea,
   
   #merge pathway by degs
   res_de_p<-merge(res_de,degs_pathways,by='gene')
-  
+  res_de_p<-unique(res_de_p,by=c('gene','pathway'))
   #create heatmaps
   dep_mat<-data.frame(dcast(res_de_p,gene~pathway,value.var =FC_col),row.names = 'gene')
   dep_mat[is.na(dep_mat)]<-0
   
   #add pvalue
-  res_de_p[,padjsig:=lapply(.SD,function(x)ifelse(x<0.001,'***',ifelse(x<0.01,'**',ifelse(x<0.05,'*','')))),.SDcols=pval_col]
+  if(show_pval){
+    
+    res_de_p[,padjsig:=lapply(.SD,function(x)ifelse(x<0.001,'***',ifelse(x<0.01,'**',ifelse(x<0.05,'*','')))),.SDcols=pval_col]
+    dep_matp<-data.frame(dcast(res_de_p,gene~pathway,value.var ='padjsig'),row.names = 'gene')
+    dep_matp[is.na(dep_matp)]<-''
+  }
   
-  dep_matp<-data.frame(dcast(res_de_p,gene~pathway,value.var ='padjsig'),row.names = 'gene')
-  dep_matp[is.na(dep_matp)]<-''
   
   #plot heatmap
   if (transpose) {
-    dep_matp<-t(dep_matp)
+    if(show_pval) dep_matp<-t(dep_matp)
     dep_mat<-t(dep_mat)
     
   }
   col_breaks<-c(((col_range[1]*10):(col_range[2]*10))/10)
-  print(pheatmap(dep_mat,
-                 breaks =col_breaks,
-                 color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
-                                                                       "RdBu")))(length(col_breaks)-1),
-                 fontsize= 7,
-                 main='Top DEGs',
-                 display_numbers = dep_matp,
-                 # cellwidth =20,
-                 # cellheight =  8,
-                 
-                 fontsize_number = 8))
+  if(show_pval){
+    print(pheatmap(dep_mat,
+                   breaks =col_breaks,
+                   color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
+                                                                         "RdBu")))(length(col_breaks)-1),
+                   fontsize= 7,
+                   main='Top DEGs',
+                   show_rownames = show_rownames,
+                   display_numbers = dep_matp,
+                   # cellwidth =20,
+                   # cellheight =  8,
+                   
+                   fontsize_number = 8))
+  }else{
+    print(pheatmap(dep_mat,
+                   breaks =col_breaks,
+                   color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
+                                                                         "RdBu")))(length(col_breaks)-1),
+                   fontsize= 7,
+                   main='Top DEGs',
+                   show_rownames = show_rownames,
+                   # display_numbers = dep_matp,
+                   # cellwidth =20,
+                   # cellheight =  8,
+                   
+                   fontsize_number = 8))
+  }
   
-} 
+  
+  
+}
