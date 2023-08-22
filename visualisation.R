@@ -1,11 +1,86 @@
 
-#visualisation package
-library(pheatmap)
+#required package
+require(pheatmap)
+require(stringr)
+
+#DIFFERENTIAL EXPRESSION RESULTS####
+#HEATMAPS comparing DEGs 
+CompDEGs<-function(res_des,
+                   group.by,
+                   gene_column='gene',
+                   FC_column='log2FoldChange',
+                   pval_column='padj',
+                   col_range=c(-2.5,2.5),
+                   show_rownames=TRUE,
+                   show_pval=TRUE,
+                   save.pdf=NULL,
+                   width =7,
+                   height = 7){
+  require('pheatmap')
+  require('data.table')
+  
+  res_des1<-copy(res_des)
+  
+  res_des1[,comparison:=.SD,.SDcols=group.by]
+  
+  res_des1[,gene:=.SD,.SDcols=gene_column]
+  
+  mat_de<-data.frame(dcast(res_des1,
+                             gene~comparison,value.var =FC_column),row.names = 'gene')
+  
+  mat_de[is.na(mat_de)]<-0
+  if(show_pval){
+    #add pvalue
+    res_des1[,padjsig:=lapply(.SD,function(x)ifelse(x<0.001,'***',ifelse(x<0.01,'**',ifelse(x<0.05,'*','')))),.SDcols=pval_column]
+    
+    mat_dep<-data.frame(dcast(res_des1,gene~comparison,value.var ='padjsig'),row.names = 'gene')
+    
+  }else{
+    mat_dep<-FALSE
+  }
+  
+  col_breaks<-c(((col_range[1]*10):(col_range[2]*10))/10)
+
+  if(!is.null(save.pdf)){
+    pdf(save.pdf,width =width,height = height)
+    print(pheatmap(mat_de,
+                   breaks =col_breaks,
+                   show_rownames=show_rownames,
+                   color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
+                                                                         "RdBu")))(length(col_breaks)-1),
+                   fontsize_row = 7,
+                   main=FC_column,
+                   display_numbers = mat_dep,
+                   cluster_cols = T,
+                   cellwidth =16,
+                   
+                   fontsize_number = 8))
+    
+    dev.off()
+  }
+  return(pheatmap(mat_de,
+                  breaks =col_breaks,
+                  color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
+                                                                        "RdBu")))(length(col_breaks)-1),
+                  fontsize_row = 7,
+                  show_rownames=show_rownames,
+                  main=FC_column,
+                  display_numbers = mat_dep,
+                  cluster_cols = T,
+                  cellwidth =16,
+                  
+                  fontsize_number = 10))
+  
+}
+
+
+
 
 #FGSEA RESULTS####
 removeRefKey<-function(term_names)str_remove(str_remove(term_names,'GOBP|GOCC|GOMF|KEGG|NABA|REACTOME|WP|BIOCARTA|PID'),'_')
 
-#EMMAPLOT####
+
+#EMMAPLOT (pathways network)
 
 {
   require(igraph)
@@ -150,18 +225,20 @@ emmaplot<-function(res_fgsea,
 
 }
 
+#HEATMAPs comparing pathhways###
 
-
-
-#HEATMAPs comparing pathhways
-
-CompPathways<-function(res_gsea,group.by,rm.refkey=TRUE,save.pdf=NULL,width =7,height = 7){
+CompPathways<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=TRUE,save.pdf=NULL,width =7,height = 7){
   require('pheatmap')
   require('data.table')
   
   res_gsea1<-copy(res_gsea)
-  
-  res_gsea1[,comparison:=.SD,.SDcols=group.by]
+  if(length(group.by)>1){
+    res_gsea1[,comp:=Reduce(function(...)paste(...,sep='_'),.SD),.SDcols=group.by]
+    
+  }else{
+    res_gsea1[,comp:=.SD,.SDcols=group.by]
+    
+  }
   
   if(rm.refkey)
     res_gsea1[,pathw:=removeRefKey(pathway)]
@@ -169,19 +246,28 @@ CompPathways<-function(res_gsea,group.by,rm.refkey=TRUE,save.pdf=NULL,width =7,h
     res_gsea1[,pathw:=pathway]
   
     mat_gsea<-data.frame(dcast(res_gsea1,
-                             pathw~comparison,value.var ='NES'),row.names = 'pathw')
+                             pathw~comp,value.var ='NES'),row.names = 'pathw')
   
   
   #add pvalue
   res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<0.05,'*','')))]
 
-  mat_gseap<-data.frame(dcast(res_gsea1,pathw~comparison,value.var ='padjsig'),row.names = 'pathw')
+  mat_gseap<-data.frame(dcast(res_gsea1,pathw~comp,value.var ='padjsig'),row.names = 'pathw')
   
   col_breaks<-c((-30:30)/10)
   col_breaks<-col_breaks[col_breaks>0.5|col_breaks<(-0.5)]
   
+  if(!is.null(legend.compa)){
+    cols_mtd<-c('comp',union(group.by,legend.compa))
+    mtd_compa<-unique(res_gsea1[,.SD,.SDcols=cols_mtd])
+    mtd_compa[,comp:=make.names(comp)]
+    mtd_compa<-data.frame(mtd_compa,row.names = 'comp')[,legend.compa,drop=F]
+  }else{
+    mtd_compa<-NA
+  }
+  
   if(!is.null(save.pdf)){
-    pdf(fp(out,save.pdf),width =7,height = 7)
+    pdf(save.pdf,width =7,height = 7)
     print(pheatmap(mat_gsea,
                    breaks =col_breaks,
                    color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
@@ -191,6 +277,8 @@ CompPathways<-function(res_gsea,group.by,rm.refkey=TRUE,save.pdf=NULL,width =7,h
                    display_numbers = mat_gseap[rownames(mat_gsea),colnames(mat_gsea)],
                    cluster_cols = T,
                    cellwidth =16,
+                   annotation_col =mtd_compa,
+                   
                    
                    fontsize_number = 10))
     
@@ -205,11 +293,15 @@ CompPathways<-function(res_gsea,group.by,rm.refkey=TRUE,save.pdf=NULL,width =7,h
                  display_numbers = mat_gseap[rownames(mat_gsea),colnames(mat_gsea)],
                  cluster_cols = T,
                  cellwidth =16,
+                 annotation_col = mtd_compa,
+                 
+                 
                  
                  fontsize_number = 10))
   
 }
 
+#HEATMAPS comparing DEGs of pathways
 CompDEGsPathways<-function(res_gsea,
                            res_de,
                            top.n=NULL,
@@ -287,3 +379,5 @@ CompDEGsPathways<-function(res_gsea,
   
   
 }
+
+

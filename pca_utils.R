@@ -18,6 +18,7 @@ pctPC<-function(pca,rngPCs="all"){
   return( pct.varPCs)
 }
 
+
 PcaPlot<-function(pca,mtd,group.by, pc_x='PC1', pc_y='PC2',sample_col='sample_id',scale=TRUE,return_pcs_mtd=FALSE){
   
   pca_dt<-merge(data.table(pca$x,keep.rownames = sample_col),mtd)
