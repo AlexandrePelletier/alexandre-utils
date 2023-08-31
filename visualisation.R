@@ -283,6 +283,7 @@ CompPathways<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=TRUE,save.p
                    fontsize_number = 10))
     
     dev.off()
+    dev.off()
   }
   return(pheatmap(mat_gsea,
                  breaks =col_breaks,
@@ -298,6 +299,163 @@ CompPathways<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=TRUE,save.p
                  
                  
                  fontsize_number = 10))
+  
+}
+
+
+CompGSEA<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=TRUE,save.pdf=NULL,width =7,height = 7){
+  require('pheatmap')
+  require('data.table')
+  
+  res_gsea1<-copy(res_gsea)
+  if(length(group.by)>1){
+    res_gsea1[,comp:=Reduce(function(...)paste(...,sep='_'),.SD),.SDcols=group.by]
+    
+  }else{
+    res_gsea1[,comp:=.SD,.SDcols=group.by]
+    
+  }
+  
+  if(rm.refkey)
+    res_gsea1[,pathw:=removeRefKey(pathway)]
+  else
+    res_gsea1[,pathw:=pathway]
+  
+  mat_gsea<-data.frame(dcast(res_gsea1,
+                             pathw~comp,value.var ='NES'),row.names = 'pathw')
+  
+  
+  #add pvalue
+  res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<0.05,'*','')))]
+  
+  mat_gseap<-data.frame(dcast(res_gsea1,pathw~comp,value.var ='padjsig'),row.names = 'pathw')
+  
+  col_breaks<-c((-30:30)/10)
+  col_breaks<-col_breaks[col_breaks>0.5|col_breaks<(-0.5)]
+  
+  if(!is.null(legend.compa)){
+    cols_mtd<-c('comp',union(group.by,legend.compa))
+    mtd_compa<-unique(res_gsea1[,.SD,.SDcols=cols_mtd])
+    mtd_compa[,comp:=make.names(comp)]
+    mtd_compa<-data.frame(mtd_compa,row.names = 'comp')[,legend.compa,drop=F]
+  }else{
+    mtd_compa<-NA
+  }
+  
+  if(!is.null(save.pdf)){
+    pdf(save.pdf,width =7,height = 7)
+    print(pheatmap(mat_gsea,
+                   breaks =col_breaks,
+                   color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
+                                                                         "RdBu")))(length(col_breaks)-1),
+                   fontsize_row = 7,
+                   main='NES',
+                   display_numbers = mat_gseap[rownames(mat_gsea),colnames(mat_gsea)],
+                   cluster_cols = T,
+                   cellwidth =16,
+                   annotation_col =mtd_compa,
+                   
+                   
+                   fontsize_number = 10))
+    
+    dev.off()
+    dev.off()
+  }
+  return(pheatmap(mat_gsea,
+                  breaks =col_breaks,
+                  color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
+                                                                        "RdBu")))(length(col_breaks)-1),
+                  fontsize_row = 7,
+                  main='NES',
+                  display_numbers = mat_gseap[rownames(mat_gsea),colnames(mat_gsea)],
+                  cluster_cols = T,
+                  cellwidth =16,
+                  annotation_col = mtd_compa,
+                  
+                  
+                  
+                  fontsize_number = 10))
+  
+}
+
+CompGost<-function(res_enr,group.by,score='precision',col_max=1,
+                   legend.compa=NULL,save.pdf=NULL,width =7,height = 7){
+  require('pheatmap')
+  require('data.table')
+  
+  res_enr1<-copy(res_enr)
+  if(length(group.by)>1){
+    res_enr1[,comp:=Reduce(function(...)paste(...,sep='_'),.SD),.SDcols=group.by]
+    
+  }else{
+    res_enr1[,comp:=.SD,.SDcols=group.by]
+    
+  }
+  
+  
+  res_enr1[,pathw:=term_name]
+  
+  mat_enr<-data.frame(dcast(res_enr1,
+                             pathw~comp,value.var =score),row.names = 'pathw')
+  
+  
+  #add pvalue
+  res_enr1[,padjsig:=ifelse(p_value<0.001,'***',ifelse(p_value<0.01,'**',ifelse(p_value<0.05,'*','')))]
+  
+  mat_enrp<-data.frame(dcast(res_enr1,pathw~comp,value.var ='padjsig'),row.names = 'pathw')
+  
+  if(any(as.matrix(mat_enr)<0)){
+    col_breaks<-unique(c(c(1:8/100,1:15/40,0.4,0.45,0.5)*-col_max,
+                         c(1:8/100,1:15/40,0.4,0.45,0.5)*col_max))
+  }else{
+    
+    col_breaks<-unique(c(1:8/100,1:15/40,0.4,0.45,0.5))*col_max
+    
+  }
+  col_breaks<-unique(c(1:8/100,1:15/40,0.4,0.45,0.5))*col_max
+
+  if(!is.null(legend.compa)){
+    cols_mtd<-unique(c('comp',union(group.by,legend.compa)))
+    mtd_compa<-unique(res_enr1[,.SD,.SDcols=cols_mtd])
+    mtd_compa[,comp:=make.names(comp)]
+    mtd_compa<-data.frame(mtd_compa,row.names = 'comp')[,legend.compa,drop=F]
+  }else{
+    mtd_compa<-NA
+  }
+  
+  if(!is.null(save.pdf)){
+    pdf(save.pdf,width =7,height = 7)
+    print(pheatmap(mat_enr,
+                   breaks =col_breaks,
+                   color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
+                                                                         "RdYlBu")))(length(col_breaks)-1),
+                   fontsize_row = 7,
+                   main=score,
+                   display_numbers = mat_enrp[rownames(mat_enr),colnames(mat_enr)],
+                   cluster_cols = T,
+                   cellwidth =16,
+                   annotation_col =mtd_compa,
+                   
+                   
+                   fontsize_number = 10))
+    
+    dev.off()
+    dev.off()
+  }
+  return(pheatmap(mat_enr,
+                  breaks =col_breaks,
+                  color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
+                                                                        "RdYlBu")))(length(col_breaks)-1),
+                  fontsize_row = 7,
+                  main=score,
+                  display_numbers = mat_enrp[rownames(mat_enr),colnames(mat_enr)],
+                  cluster_cols = T,
+                  cellwidth =16,
+                  annotation_col = mtd_compa,
+                  
+                  
+                  
+                  fontsize_number = 10))
   
 }
 

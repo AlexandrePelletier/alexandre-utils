@@ -54,6 +54,44 @@ bed_inter<- function(a, b, opt1="-wa", opt2="-wb",out_dir=".", select=NULL, col.
   }
 }
 
+
+#Reformatting####
+DetectDEResFormat<-function(res_de){
+  
+  if(all(c('log2FoldChange','padj')%in%colnames(res_de)))return('DESEQ2')
+  else if(any(c('avg_log2FC','avg_logFC')%in%colnames(res_de))&'p_val_adj'%in%colnames(res_de))return('SEURAT')
+  else return('unknown')
+  
+}
+
+FormatDEResToSeurat<-function(res_de){
+  res_forms<-list(DESEQ2=c(padj='padj',
+                           pval='pvalue',
+                           stat='stat',
+                           FC='log2FoldChange'),
+                  SEURAT=c(padj='p_val_adj',
+                           pval='p_val',
+                           stat='stat',
+                           FC='avg_log2FC'))
+  
+  if(DetectDEResFormat(res_de)=='DESEQ2'){
+    setnames(res_de,old = res_forms[['DESEQ2']],
+             new = res_forms[['SEURAT']])
+    return(res_de)
+  }else{
+    stop('unknown format')
+  }
+  return(res_de)
+}
+
+ReFormatDERes<-function(res_de,to='SEURAT'){
+  if(to=='SEURAT') ifelse(DetectDEResFormat(res_de)==to,return(res_de),return(FormatDEResToSeurat(res_de)))
+  else{
+    stop('unsupported formatting')
+  }
+}
+
+
 #GGPLOT####
 
 bar_bw<-function()scale_fill_manual(values=c('black','grey'))
@@ -63,6 +101,8 @@ bar_rb<-function(invert=FALSE)ifelse(invert,return(scale_fill_manual(values=c('r
 
 
 GetMartGenes<-function()biomaRt::useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
+GetMartMouseGenes<-function()biomaRt::useEnsembl(biomart = "genes", dataset = "mmusculus_gene_ensembl")
+
 GetMartReg<-function()biomaRt::useEnsembl(biomart = "regulation", dataset = "hsapiens_regulatory_feature")
 GetMartMotif<-function()biomaRt::useEnsembl(biomart = "regulation", dataset = "hsapiens_motif_feature")
 
@@ -215,8 +255,8 @@ GetVarPCs<-function(pca,rngPCs="all"){
 convertHumanGeneList <- function(x,return_dt=T){
   
   require("biomaRt")
-  human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-  mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+  human =GetMartGenes()
+  mouse = GetMartMouseGenes()
   
   genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x , mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
   
@@ -232,8 +272,8 @@ convertHumanGeneList <- function(x,return_dt=T){
 convertMouseGeneList <- function(x,return_dt=T){
   
   require("biomaRt")
-  human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-  mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+  human =GetMartGenes()
+  mouse = GetMartMouseGenes()
   
   genesV2 = getLDS(attributes = c("mgi_symbol"), filters = "mgi_symbol", values = x , mart = mouse, attributesL = c("hgnc_symbol"), martL = human, uniqueRows=T)
   if(return_dt)return(data.table(genesV2))
@@ -245,7 +285,7 @@ convertMouseGeneList <- function(x,return_dt=T){
 }
 
 
-#Over repre / GSEA
+#Over repre / GSEA####
 
 
 OR<-function(set1,set2,size_universe){
