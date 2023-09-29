@@ -250,7 +250,7 @@ CompPathways<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=TRUE,save.p
   
   
   #add pvalue
-  res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<0.05,'*','')))]
+  res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<0.05,'*',ifelse(padj<0.25,'.',''))))]
 
   mat_gseap<-data.frame(dcast(res_gsea1,pathw~comp,value.var ='padjsig'),row.names = 'pathw')
   
