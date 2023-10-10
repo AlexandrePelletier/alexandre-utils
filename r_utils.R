@@ -597,3 +597,49 @@ TFsMotifPlot<-function(object,region,motif.names,assay=NULL,size=2,alpha=1,pad=0
 str_to_vec<-function(ids_sepBySlash,sep="/")as.vector(strsplit(ids_sepBySlash,sep)[[1]])
 
   
+
+#GSUB FILES CREATION####
+jobFileCreation<-function(cmd_list,filename,modules=NULL,nThreads=4,maxHours=24){
+  template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
+  template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
+  dir.create('logs',showWarnings = F)
+  file_path<-file.path('scripts',filename)
+  log_file=file.path('logs',paste0(str_remove(filename,'.qsub$'),'.log'))
+  
+  cat('#!/bin/bash -l\n',file = file_path)
+  
+  #add the job parameters
+  proj_name<-'-P tcwlab'
+  CombStdOutErr<-'-j y'
+  maxHours<-paste0('-l h_rt=',maxHours,':00:00')
+  qlog<-paste('-o ',log_file)
+  nThreads<-paste('-pe omp',nThreads)
+  
+  cat( '#Parameters of the Jobs :',file = file_path,append = T)
+  cat( c('\n',proj_name,CombStdOutErr,maxHours,qlog,nThreads),file = file_path,append = T,sep = '\n#$')
+  cat( '\n',file = file_path,append = T,sep = '\n')
+  
+  #add the header
+  system(paste('cat',template_header,'>>',file_path))
+  
+  
+  #add the module to loads
+  if(!is.null(modules)){
+    modules<-ifelse(modules=='R','R/4.2.1',modules)
+    cat( modules,file = file_path,append = T,sep = '\nmodule load')
+    cat( '\n',file = file_path,append = T,sep = '\n')
+    
+  }
+  
+  #add the commandes to exec
+  cmds<-unlist(cmd_list)
+  cat( cmds,file = file_path,append = T,sep = '\n')
+  cat( '\n',file = file_path,append = T,sep = '\n')
+  
+  #add the tail
+  system(paste('cat',template_tail,'>>',file_path))
+  message('qsub file created at ',file_path)
+  message('header:')
+  system(paste('head',file_path))
+  
+}
