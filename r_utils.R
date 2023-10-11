@@ -669,3 +669,173 @@ jobFileCreation<-function(cmd_list,filename,modules=NULL,conda_env=NULL,nThreads
   
   
 }
+
+CreateJobFile<-function(cmd_list,filename,modules=NULL,conda_env=NULL,nThreads=4,maxHours=24){
+  template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
+  template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
+  filename<-str_remove(filename,'scripts/')
+  
+  dir.create('logs',showWarnings = F)
+  file_path<-file.path('scripts',filename)
+  log_file=file.path('logs',paste0(str_remove(filename,'.qsub$'),'.log'))
+  
+  cat('#!/bin/bash -l\n',file = file_path)
+  
+  #add the job parameters
+  proj_name<-'-P tcwlab'
+  CombStdOutErr<-'-j y'
+  maxHours<-paste0('-l h_rt=',maxHours,':00:00')
+  qlog<-paste('-o ',log_file)
+  nThreads<-paste('-pe omp',nThreads)
+  
+  cat( '#Parameters of the Jobs :',file = file_path,append = T)
+  cat( c('\n',proj_name,CombStdOutErr,maxHours,qlog,nThreads),file = file_path,append = T,sep = '\n#$')
+  cat( '\n',file = file_path,append = T,sep = '\n')
+  
+  #add the module to loads
+  if(!is.null(modules)){
+    modules<-ifelse(modules=='R','R/4.2.1',modules)
+    
+    if('gatk'%in%modules){
+      conda_env<-union(conda_env,'/share/pkg.8/gatk/4.4.0.0/install/gatk-4.4.0.0')
+    }
+    
+    cat( '#Modules to load:',file = file_path,append = T)
+    cat( c('\n',modules),file = file_path,append = T,sep = '\nmodule load ')
+    cat( '\n',file = file_path,append = T,sep = '\n')
+    
+  }
+  
+  #activate conda environment 
+  if(!is.null(conda_env)){
+    cat( '#Conda environment activation:',file = file_path,append = T)
+    cat( c('\n',conda_env),file = file_path,append = T,sep = '\nconda activate ')
+    cat( '\n',file = file_path,append = T,sep = '\n')
+    
+  }
+  
+  
+  
+  #add the header
+  system(paste('cat',template_header,'>>',file_path))
+  
+  
+  #add the commandes to exec
+  cmds<-unlist(cmd_list)
+  
+  if(!is.null(names(cmds))){
+    cmds<-unlist(lapply(names(cmds),
+                        function(s)return(c(paste('echo',paste0('"----- Processing of ',s,' -----"')),cmds[[s]]))))
+    
+  }
+  
+  cat( cmds,file = file_path,append = T,sep = '\n')
+  cat( '\n',file = file_path,append = T,sep = '\n')
+  
+  #add the tail
+  system(paste('cat',template_tail,'>>',file_path))
+  
+  #show the file header
+  message('qsub file created at ',file_path)
+  message('header:')
+  system(paste('head -n 15',file_path))
+  
+  #show the first commands
+  message('5 first commands:')
+  cat( head(cmds,5),sep = '\n')
+  
+  
+  
+}
+
+
+CreateJobForRfile<-function(r_filename,modules='R',conda_env=NULL,nThreads=4,maxHours=24){
+  r_filename<-str_remove(r_filename,'scripts/')
+  template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
+  template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
+  dir.create('logs',showWarnings = F)
+  log_file=file.path('logs',paste0(str_remove(r_filename,'.R$'),'.log'))
+  q_filename=paste0(str_remove(r_filename,'.R$'),'.qsub')
+  
+  qfile_path<-file.path('scripts',q_filename)
+  rfile_path<-file.path('scripts',r_filename)
+  
+  
+  cat('#!/bin/bash -l\n',file = qfile_path)
+  
+  #add the job parameters
+  proj_name<-'-P tcwlab'
+  CombStdOutErr<-'-j y'
+  maxHours<-paste0('-l h_rt=',maxHours,':00:00')
+  qlog<-paste('-o ',log_file)
+  nThreads<-paste('-pe omp',nThreads)
+  
+  cat( '#Parameters of the Jobs :',file = qfile_path,append = T)
+  cat( c('\n',proj_name,CombStdOutErr,maxHours,qlog,nThreads),file = qfile_path,append = T,sep = '\n#$')
+  cat( '\n',file = qfile_path,append = T,sep = '\n')
+  
+  #add the module to loads
+  if(!is.null(modules)){
+    modules<-ifelse(modules=='R','R/4.2.1',modules)
+    cat( '#Modules to load:',file = qfile_path,append = T)
+    cat( c('\n',modules),file = qfile_path,append = T,sep = '\nmodule load ')
+    cat( '\n',file = qfile_path,append = T,sep = '\n')
+    
+  }
+  
+  #activate conda environment 
+  if(!is.null(conda_env)){
+    cat( '#Conda environment activation:',file = qfile_path,append = T)
+    cat( c('\n',conda_env),file = qfile_path,append = T,sep = '\nconda activate ')
+    cat( '\n',file = qfile_path,append = T,sep = '\n')
+    
+  }
+  
+  
+  
+  #add the header
+  system(paste('cat',template_header,'>>',qfile_path))
+  
+  
+  #add the Rscript to exec
+  cmd<-paste('Rscript',rfile_path,'>>',log_file)
+  
+  cat( cmd,file = qfile_path,append = T,sep = '\n')
+  cat( '\n',file = qfile_path,append = T,sep = '\n')
+  
+  #add the tail
+  system(paste('cat',template_tail,'>>',qfile_path))
+  
+  #show the file header
+  message('qsub file created at ',qfile_path)
+  message('header:')
+  system(paste('head -n 15',qfile_path))
+  
+  #show the  bash command
+  message('the bash command to execute:')
+  cat( cmd,sep = '\n')
+  
+  #show the first R lines
+  message('the 15 firsts R lines to executes')
+  system(paste('head -n 15',rfile_path))
+  
+  
+}
+
+RunQsub<-function(qsub_file,job_name,proj_name='tcwlab',wait_for=NULL){
+  if(!str_detect(qsub_file,'scripts/')){
+    qsub_file<-fp('scripts',qsub_file)
+  }
+  if(is.null(wait_for)){
+    cmd<-paste('qsub','-N',job_name,qsub_file,proj_name)
+    system(cmd)
+  }else{
+    cmd<-paste('qsub',
+               '-N',job_name,
+               '-hold_jid',wait_for,
+               qsub_file,proj_name)
+    system(cmd)
+    
+  }
+
+}
