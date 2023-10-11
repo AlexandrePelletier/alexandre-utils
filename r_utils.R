@@ -599,7 +599,7 @@ str_to_vec<-function(ids_sepBySlash,sep="/")as.vector(strsplit(ids_sepBySlash,se
   
 
 #GSUB FILES CREATION####
-jobFileCreation<-function(cmd_list,filename,modules=NULL,nThreads=4,maxHours=24){
+jobFileCreation<-function(cmd_list,filename,modules=NULL,conda_env=NULL,nThreads=4,maxHours=24){
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
   dir.create('logs',showWarnings = F)
@@ -619,27 +619,53 @@ jobFileCreation<-function(cmd_list,filename,modules=NULL,nThreads=4,maxHours=24)
   cat( c('\n',proj_name,CombStdOutErr,maxHours,qlog,nThreads),file = file_path,append = T,sep = '\n#$')
   cat( '\n',file = file_path,append = T,sep = '\n')
   
-  #add the header
-  system(paste('cat',template_header,'>>',file_path))
-  
-  
   #add the module to loads
   if(!is.null(modules)){
     modules<-ifelse(modules=='R','R/4.2.1',modules)
-    cat( modules,file = file_path,append = T,sep = '\nmodule load')
+    cat( '#Modules to load:',file = file_path,append = T)
+    cat( c('\n',modules),file = file_path,append = T,sep = '\nmodule load ')
     cat( '\n',file = file_path,append = T,sep = '\n')
     
   }
   
+  #activate conda environment 
+  if(!is.null(conda_env)){
+    cat( '#Conda environment activation:',file = file_path,append = T)
+    cat( c('\n',conda_env),file = file_path,append = T,sep = '\nconda activate ')
+    cat( '\n',file = file_path,append = T,sep = '\n')
+    
+  }
+  
+  
+  
+  #add the header
+  system(paste('cat',template_header,'>>',file_path))
+  
+
   #add the commandes to exec
   cmds<-unlist(cmd_list)
+  
+  if(!is.null(names(cmds))){
+    cmds<-unlist(lapply(names(cmds),
+                        function(s)return(c(paste('echo',paste0('"----- Processing of ',s,' -----"')),cmds[[s]]))))
+    
+  }
+  
   cat( cmds,file = file_path,append = T,sep = '\n')
   cat( '\n',file = file_path,append = T,sep = '\n')
   
   #add the tail
   system(paste('cat',template_tail,'>>',file_path))
+  
+  #show the file header
   message('qsub file created at ',file_path)
   message('header:')
-  system(paste('head',file_path))
+  system(paste('head -n 15',file_path))
+  
+  #show the first commands
+  message('5 first commands:')
+  cat( head(cmds,5),sep = '\n')
+  
+  
   
 }
