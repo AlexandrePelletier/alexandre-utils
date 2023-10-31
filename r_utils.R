@@ -12,50 +12,15 @@ library("patchwork")
 library("here")
 
 
-#r basic utils functions####
+#basic utils functions####
 
 fp<-function(...)file.path(...)
 
 ps<-function(...,sep="",collapse = NULL)paste(...,sep=sep,collapse = collapse)
 
-bed_inter<- function(a, b, opt1="-wa", opt2="-wb",out_dir=".", select=NULL, col.names=NULL){
-  require(data.table)
-  l<-list(a,b)
-  files_to_rm<-c(FALSE,FALSE)
-  file_paths<-sapply(1:2, function(i){
-    x<-l[[i]]
-    if(is.data.frame(x)){
-      files_to_rm[i]<-TRUE
-      file_path<-fp(out_dir,paste0("temp",i,".bed"))
-      fwrite(x,file_path,sep="\t",col.names = FALSE)
-      
-    }else{
-      file_path<-x
-    }
-    return(file_path)
-  })
-  
-  out_file<-fp(out_dir,"temp_inter.bed")
-  cmd<-paste("bedtools intersect -a",file_paths[1],"-b",file_paths[2], opt1, opt2,">",out_file)
-  message("run in shell : ",cmd)
-  system(cmd)
-  message("done.")
-  
-  if(!is.null(col.names)){
-    dt<-fread(out_file,select = select,col.names = col.names)
-    file.remove(out_file)
-    file.remove(file_paths[files_to_rm])
-    return(dt)
-  }else{
-    dt<-fread(out_file,select = select)
-    file.remove(out_file)
-    file.remove(file_paths[files_to_rm])
-    return(dt)
-  }
-}
 
 
-#Reformatting####
+#Reformatting classical R data/results ####
 DetectDEResFormat<-function(res_de){
   
   if(all(c('log2FoldChange','padj')%in%colnames(res_de)))return('DESEQ2')
@@ -596,7 +561,12 @@ TFsMotifPlot<-function(object,region,motif.names,assay=NULL,size=2,alpha=1,pad=0
 
 str_to_vec<-function(ids_sepBySlash,sep="/")as.vector(strsplit(ids_sepBySlash,sep)[[1]])
 
-  
+#DATA.TABLE ADD IN
+freadvcf<-function(file){
+  cmd<-paste('zcat',file,'| grep -v "^##"')
+  fread(cmd)
+}
+
 
 #GSUB FILES CREATION####
 jobFileCreation<-function(cmd_list,filename,modules=NULL,conda_env=NULL,nThreads=4,maxHours=24){
@@ -670,7 +640,7 @@ jobFileCreation<-function(cmd_list,filename,modules=NULL,conda_env=NULL,nThreads
   
 }
 
-CreateJobFile<-function(cmd_list,filename,modules=NULL,conda_env=NULL,nThreads=4,maxHours=24){
+CreateJobFile<-function(cmd_list,filename,modules=NULL,loadBashrc=FALSE,conda_env=NULL,nThreads=4,maxHours=24){
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
   filename<-str_remove(filename,'scripts/')
@@ -697,13 +667,26 @@ CreateJobFile<-function(cmd_list,filename,modules=NULL,conda_env=NULL,nThreads=4
     modules<-ifelse(modules=='R','R/4.2.1',modules)
     
     if('gatk'%in%modules){
+      
+      modules<-c(modules[modules!='gatk'],
+                 'miniconda/23.1.0',
+            'java/17.0.8',
+            'gatk/4.4.0.0')
+      
       conda_env<-union(conda_env,'/share/pkg.8/gatk/4.4.0.0/install/gatk-4.4.0.0')
+      
     }
     
     cat( '#Modules to load:',file = file_path,append = T)
     cat( c('\n',modules),file = file_path,append = T,sep = '\nmodule load ')
     cat( '\n',file = file_path,append = T,sep = '\n')
     
+  }
+  #load .bashrc
+  if(loadBashrc){
+    cat( '# loading of bashrc profile:',file = file_path,append = T)
+    cat('\n source $HOME/.bashrc',file = file_path,append = T)
+    cat( '\n',file = file_path,append = T,sep = '\n')
   }
   
   #activate conda environment 
@@ -749,7 +732,7 @@ CreateJobFile<-function(cmd_list,filename,modules=NULL,conda_env=NULL,nThreads=4
 }
 
 
-CreateJobForRfile<-function(r_filename,modules='R',conda_env=NULL,nThreads=4,maxHours=24){
+CreateJobForRfile<-function(r_filename,modules='R',loadBashrc=FALSE,conda_env=NULL,nThreads=4,maxHours=24){
   r_filename<-str_remove(r_filename,'scripts/')
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
@@ -781,6 +764,12 @@ CreateJobForRfile<-function(r_filename,modules='R',conda_env=NULL,nThreads=4,max
     cat( c('\n',modules),file = qfile_path,append = T,sep = '\nmodule load ')
     cat( '\n',file = qfile_path,append = T,sep = '\n')
     
+  }
+  
+  #load .bashrc
+  if(loadBashrc){
+    cat('\n source $HOME/.bashrc',file = qfile_path,append = T)
+    cat( '\n',file = qfile_path,append = T,sep = '\n')
   }
   
   #activate conda environment 
@@ -838,4 +827,52 @@ RunQsub<-function(qsub_file,job_name,proj_name='tcwlab',wait_for=NULL){
     
   }
 
+}
+
+#bash tools wrapper####
+bed_inter<- function(a, b, opt1="-wa", opt2="-wb",out_dir=".", select=NULL, col.names=NULL){
+  require(data.table)
+  l<-list(a,b)
+  files_to_rm<-c(FALSE,FALSE)
+  file_paths<-sapply(1:2, function(i){
+    x<-l[[i]]
+    if(is.data.frame(x)){
+      files_to_rm[i]<-TRUE
+      file_path<-fp(out_dir,paste0("temp",i,".bed"))
+      fwrite(x,file_path,sep="\t",col.names = FALSE)
+      
+    }else{
+      file_path<-x
+    }
+    return(file_path)
+  })
+  
+  out_file<-fp(out_dir,"temp_inter.bed")
+  cmd<-paste("bedtools intersect -a",file_paths[1],"-b",file_paths[2], opt1, opt2,">",out_file)
+  message("run in shell : ",cmd)
+  system(cmd)
+  message("done.")
+  
+  if(!is.null(col.names)){
+    dt<-fread(out_file,select = select,col.names = col.names)
+    file.remove(out_file)
+    file.remove(file_paths[files_to_rm])
+    return(dt)
+  }else{
+    dt<-fread(out_file,select = select)
+    file.remove(out_file)
+    file.remove(file_paths[files_to_rm])
+    return(dt)
+  }
+}
+
+
+RunGatk<-function(cmd){
+  message('run in a terminal:')
+  
+  cat(paste('module load miniconda/23.1.0',
+            'module load java/17.0.8',
+            'module load gatk/4.4.0.0',
+            'conda activate /share/pkg.8/gatk/4.4.0.0/install/gatk-4.4.0.0',
+            cmd,sep = '\n'))
 }

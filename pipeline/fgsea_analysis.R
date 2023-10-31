@@ -3,26 +3,27 @@
 require("devtools")
 devtools::install_github("ctlab/fgsea")
 
-#analysis
+
+#load packages
 library(fgsea)
 library(data.table)
 
-pathways_dir<-'path/to/gmt_directory' #folder containing all  reference pathways files in gmt format can be obtained at: https://drive.google.com/drive/folders/1-9CxYMLg7UBhzwigAIN8ACd8sDnHxUzE?usp=sharing
+pathways_dir<-'/projectnb2/tcwlab/MSigDB/' #folder containing all  reference pathways files in gmt format can be obtained at: https://drive.google.com/drive/folders/1-9CxYMLg7UBhzwigAIN8ACd8sDnHxUzE?usp=sharing
 
 diffexp_file_path<-"path/to/your_differential_expression_results_file.csv"
 
-pathways_to_test<-c("GO_all", "GO_bp", "GO_cc", "GO_mf", 'CP_all',"CP_biocarta", "CP_kegg", "CP_reactome", "CP_pid") # choose pathway gene sets reference you want to test or let like that to test for all
-
+category_to_test<-c("GO", "CP")# choose pathway gene sets reference you want to test or let like that to test for all
 
 #some useful function
-GenesInPathways<-function(pathways,source,path_to_pathways_dir=pathways_dir){
-  #return list of genes for each pathway
-  gmt_mtd<-fread(file.path(path_to_pathways_dir,'gmt_metadata.csv')) 
+GenesInPathways<-function(pathways,cat,pathways_dir){  #return the list of genes for each pathway
+
+  gmt_mtd<-fread(file.path(pathways_dir,'gmt_metadata2.csv')) #need to have the gmt metadata file in the folder containing the pathways
   
-  return(gmtPathways(file.path(path_to_pathways_dir,  gmt_mtd[name==source]$gmt))[pathways])
+  return(gmtPathways(file.path(path_to_pathways_dir,  gmt_mtd[category==cat]$gmt_file))[pathways])
 }
 
 
+#analysis
 #calculate your gene stats
 res_diffexp<-fread(diffexp_file_path)
 
@@ -39,31 +40,33 @@ gmt_mtd<-fread(file.path(pathways_dir,'gmt_metadata.csv'))
 
 #run fgsea for every pathway source
 
-res_gsea<-Reduce(rbind,lapply(pathways_to_test, function(p){
+res_gsea<-Reduce(rbind,lapply(category_to_test, function(cat){
   
-  message(paste('testing enrichement for',gmt_mtd[name==p]$desc))
+  message(paste('testing enrichement for',cat,'category'))
   
-  pathways<- gmtPathways(file.path(pathways_dir,gmt_mtd[name==p]$gmt))
+  pathways<- gmtPathways(file.path(pathways_dir,gmt_mtd[category==cat]$gmt_file))
   
   res<-fgsea(pathways,
-             stats=gene_stats,minSize=10,maxSize=2000,scoreType='std',nPermSimple = 10000)
+             stats=gene_stats,minSize=10,maxSize=2000,scoreType='std',eps=0)
   
-  return(res[,source:=p])
+  return(res[,category:=cat])
   
 }))
 
-
+un
 res_gsea[padj<0.05] #display all pathways enriched in up or downregulated genes at adjusted pvalue 0.05
-res_gsea[padj<0.05&source=='GO_bp'] #display GO Biological Process enriched in up or downregulated genes at adjusted pvalue 0.05
+res_gsea[padj<0.05&source=='GO'] #display GO tenrs enriched in up or downregulated genes at adjusted pvalue 0.05
 
 res_gsea[padj<0.05&NES>0] #display all pathways enriched in upregulated genes 
-res_gsea[padj<0.05&NES>0&source=='GO_bp'] #display GO Biological Process enriched in upregulated genes 
-res_gsea[padj<0.05&NES<0&source=='GO_bp'] #display GO Biological Process enriched in downregulated genes 
+res_gsea[padj<0.05&NES>0&source=='CP'] #display Cannonical Pathways enriched in upregulated genes 
+res_gsea[padj<0.05&NES<0&source=='GO'] #display GO terms enriched in downregulated genes 
 
 #...
-#add pathway size info
-pathways_info<-fread(file.path(pathways_dir,'all_msigdb_pathways_metadata.csv.gz'))
-res_gsea<-merge(res_gsea[,term:=pathway],pathways_info,by=c('source','term'))[order(source,pval)]
+#add subcategory pathway size info
+pathways_info<-fread(file.path(pathways_dir,'all_CPandGOs_genesets_metadata.csv.gz'))
+res_gsea<-merge(res_gsea,pathways_info,by=c('category','pathway'))[order(source,pval)]
+
+
 
 #save results
 
@@ -71,9 +74,9 @@ res_gsea<-merge(res_gsea[,term:=pathway],pathways_info,by=c('source','term'))[or
 fwrite(res_gsea,"res_fgsea.csv")
 
 #one putative visualisation 
-pathways_to_visualize<-'GO_bp' #copy and change to make the plot it for all pathways
-topPathwaysUp <- res_gsea[source==pathways_to_visualize][ES > 0][head(order(pval), n=10), pathway] 
-topPathwaysDown <- res_gsea[source==pathways_to_visualize][ES < 0][head(order(pval), n=10), pathway] 
+category_to_visualize<-'GO' #copy and change to make the plot it for all pathways
+topPathwaysUp <- res_gsea[category==category_to_visualize][ES > 0][head(order(pval), n=10), pathway] 
+topPathwaysDown <- res_gsea[source==category_to_visualize][ES < 0][head(order(pval), n=10), pathway] 
 
 topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
 plotGseaTable(GenesInPathways(topPathways,pathways_to_visualize), gene_stats, res_gsea[source==pathways_to_visualize], gseaParam = 0.5, colwidths = c(20, 6, 2, 2, 2))
