@@ -210,8 +210,6 @@ emmaplot<-function(res_fgsea,
   if(length(lelist)>1){
     
     simat<-get_similarity_matrix(lelist)
-    print(simat)
-    
     
     g <- get_igraph(res_fgsea = res_fgsea,
                     pathway_names = pathway_names,
