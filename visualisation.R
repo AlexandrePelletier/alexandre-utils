@@ -190,6 +190,7 @@ emmaplot<-function(res_fgsea,
                    label.size=2.5,
                    cols=c('blue','white','red'),
                    max.overlaps=10){
+  require('ggrepel')
   
   if(is.null(pathway_names))pathway_names=res_fgsea[order(pval)]$pathway
   
@@ -206,28 +207,43 @@ emmaplot<-function(res_fgsea,
     }
   }
   
-  simat<-get_similarity_matrix(lelist)
-  
-  
-  g <- get_igraph(res_fgsea = res_fgsea,
-                  pathway_names = pathway_names,
-                  simmat = simat,
-                  leading_edge_list = lelist,
-                  min_edge = min_edge,
-                  col.var = col.var
-                  )
-  
-  
-  p <- ggraph(g, layout='nicely')
-  
-  p <- p + geom_edge_link(alpha=.8, aes_(width=~I(width)),
-                          colour='darkgrey')
-  ## add dot
-  p <- add_category_nodes(p = p,col.var =col.var,cols=cols)
-  ## add node label
-  
-  p <- add_node_label(p = p,label.size=label.size,max.overlaps=max.overlaps)
-  
+  if(length(lelist)>1){
+    
+    simat<-get_similarity_matrix(lelist)
+    print(simat)
+    
+    
+    g <- get_igraph(res_fgsea = res_fgsea,
+                    pathway_names = pathway_names,
+                    simmat = simat,
+                    leading_edge_list = lelist,
+                    min_edge = min_edge,
+                    col.var = col.var
+    )
+    
+    
+    p <- ggraph(g, layout='nicely')
+    
+    p <- p + geom_edge_link(alpha=.8, aes_(width=~I(width)),
+                            colour='darkgrey')
+    ## add dot
+    p <- add_category_nodes(p = p,col.var =col.var,cols=cols)
+    
+    ## add node label
+    
+    p <- add_node_label(p = p,label.size=label.size,max.overlaps=max.overlaps)
+    
+  }else{
+    p <- ggplot(res_fgsea[pathway%in%pathway_names][,x:=1][,y:=1],aes_string(x='x',y='x'))+
+      geom_point(aes_string(size='size',col=col.var))+
+      geom_text_repel(aes(label=pathway))+
+      scale_color_gradient2(low = cols[1],high = cols[max(1:length(cols))],midpoint = 0,limits=c(-abs(as.numeric(as.vector(res_fgsea[pathway%in%pathway_names][,..col.var]))),
+                                                                                                 abs(as.numeric(as.vector(res_fgsea[pathway%in%pathway_names][,..col.var])))))+
+      theme_graph()
+    
+  }
+ 
+
   if(!is.null(show_pathway_of)){
     
     return(p+ggtitle(paste('Enriched pathways with', show_pathway_of)))

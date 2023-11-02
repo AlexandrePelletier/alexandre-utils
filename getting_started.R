@@ -30,7 +30,7 @@ ggsave('examples_data/emmaplot_top80_fgsea_apoe22_vs_33_microglia.pdf')
 
 
 #[New] You can decided to display only the pathway of a certain gene (This gene is in the leading edge genes of the pathway)
-emmaplot(res_fgsea_top,show_pathway_of = 'APOE4')
+emmaplot(res_fgsea_top,show_pathway_of = 'CDK2')
 
 
 
