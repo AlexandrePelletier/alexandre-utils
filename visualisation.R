@@ -185,13 +185,26 @@ add_node_label <- function(p,label.size=label.size,max.overlaps=10) {
 emmaplot<-function(res_fgsea,
                    pathway_names=NULL, 
                    col.var="NES",
+                   show_pathway_of=NULL,
                    min_edge=0.2,
                    label.size=2.5,
                    cols=c('blue','white','red'),
                    max.overlaps=10){
+  
   if(is.null(pathway_names))pathway_names=res_fgsea[order(pval)]$pathway
   
-  lelist<-LeadingEdges(res_fgsea)
+  lelist<-LeadingEdges(res_fgsea[pathway%in%pathway_names])
+  
+  if(!is.null(show_pathway_of)){
+    
+    lelist<-lelist[sapply(lelist, function(leadingedges)show_pathway_of%in%leadingedges)]
+    if(length(lelist)>0){
+      pathway_names<-names(lelist)
+      
+    }else{
+      stop('This gene are not found in any leading edges of the given pathways')
+    }
+  }
   
   simat<-get_similarity_matrix(lelist)
   
@@ -215,8 +228,14 @@ emmaplot<-function(res_fgsea,
   
   p <- add_node_label(p = p,label.size=label.size,max.overlaps=max.overlaps)
   
-  
-  return(p)
+  if(!is.null(show_pathway_of)){
+    
+    return(p+ggtitle(paste('Enriched pathways with', show_pathway_of)))
+    
+  }else{
+    return(p)
+    
+  }
 }
 
 
