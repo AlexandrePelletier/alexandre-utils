@@ -640,7 +640,10 @@ jobFileCreation<-function(cmd_list,filename,modules=NULL,conda_env=NULL,nThreads
   
 }
 
-CreateJobFile<-function(cmd_list,filename,modules=NULL,loadBashrc=FALSE,conda_env=NULL,nThreads=4,maxHours=24){
+CreateJobFile<-function(cmd_list,filename,modules=NULL,
+                        loadBashrc=FALSE,conda_env=NULL,
+                        micromamba_env=NULL,
+                        nThreads=4,maxHours=24){
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
   filename<-str_remove(filename,'scripts/')
@@ -697,6 +700,14 @@ CreateJobFile<-function(cmd_list,filename,modules=NULL,loadBashrc=FALSE,conda_en
     
   }
   
+  #activate conda environment 
+  if(!is.null(micromamba_env)){
+    cat( '#Micromamba environment activation:',file = file_path,append = T)
+    cat( c('\n',micromamba_env),file = file_path,append = T,sep = '\nmicromamba activate ')
+    cat( '\n',file = file_path,append = T,sep = '\n')
+    
+  }
+  
   
   
   #add the header
@@ -731,11 +742,120 @@ CreateJobFile<-function(cmd_list,filename,modules=NULL,loadBashrc=FALSE,conda_en
   
 }
 
-
-CreateJobForRfile<-function(r_filename,modules='R',loadBashrc=FALSE,conda_env=NULL,nThreads=4,maxHours=24){
-  r_filename<-str_remove(r_filename,'scripts/')
+CreateJobForPyFile<-function(python_file,filename,modules=NULL,
+                        loadBashrc=FALSE,conda_env=NULL,
+                        micromamba_env=NULL,
+                        nThreads=4,maxHours=24){
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
+  
+  filename<-str_remove(str_remove(python_file,'scripts/'),'.py$')
+  dir.create('logs',showWarnings = F)
+  log_file=file.path('logs',paste0(filename,'.log'))
+  
+
+
+  
+  dir.create('logs',showWarnings = F)
+  
+  qsub_file<-file.path('scripts',paste0(filename,'.qsub'))
+  log_file=file.path('logs',paste0(filename,'.log'))
+  
+  cat('#!/bin/bash -l\n',file = qsub_file)
+  
+  #add the job parameters
+  proj_name<-'-P tcwlab'
+  CombStdOutErr<-'-j y'
+  maxHours<-paste0('-l h_rt=',maxHours,':00:00')
+  qlog<-paste('-o ',log_file)
+  nThreads<-paste('-pe omp',nThreads)
+  
+  cat( '#Parameters of the Jobs :',file = qsub_file,append = T)
+  cat( c('\n',proj_name,CombStdOutErr,maxHours,qlog,nThreads),file = qsub_file,append = T,sep = '\n#$')
+  cat( '\n',file = qsub_file,append = T,sep = '\n')
+  
+  #add the module to loads
+  if(!is.null(modules)){
+    modules<-ifelse(modules=='R','R/4.2.1',modules)
+    
+    if('gatk'%in%modules){
+      
+      modules<-c(modules[modules!='gatk'],
+                 'miniconda/23.1.0',
+                 'java/17.0.8',
+                 'gatk/4.4.0.0')
+      
+      conda_env<-union(conda_env,'/share/pkg.8/gatk/4.4.0.0/install/gatk-4.4.0.0')
+      
+    }
+    
+    cat( '#Modules to load:',file = qsub_file,append = T)
+    cat( c('\n',modules),file = qsub_file,append = T,sep = '\nmodule load ')
+    cat( '\n',file = qsub_file,append = T,sep = '\n')
+    
+  }
+  #load .bashrc
+  if(loadBashrc){
+    cat( '# loading of bashrc profile:',file = qsub_file,append = T)
+    cat('\n source $HOME/.bashrc',file = qsub_file,append = T)
+    cat( '\n',file = qsub_file,append = T,sep = '\n')
+  }
+  
+  #activate conda environment 
+  if(!is.null(conda_env)){
+    cat( '#Conda environment activation:',file = qsub_file,append = T)
+    cat( c('\n',conda_env),file = qsub_file,append = T,sep = '\nconda activate ')
+    cat( '\n',file = qsub_file,append = T,sep = '\n')
+    
+  }
+  
+  #activate conda environment 
+  if(!is.null(micromamba_env)){
+    cat( '#Micromamba environment activation:',file = qsub_file,append = T)
+    cat( c('\n',micromamba_env),file = qsub_file,append = T,sep = '\nmicromamba activate ')
+    cat( '\n',file = qsub_file,append = T,sep = '\n')
+    
+  }
+  
+  
+  
+  #add the header
+  system(paste('cat',template_header,'>>',qsub_file))
+  
+  
+  #add the Python script to exec
+  cmd<-paste('python',python_file,'>>',log_file)
+  
+  cat( cmd,file = qsub_file,append = T,sep = '\n')
+  cat( '\n',file = qsub_file,append = T,sep = '\n')
+  
+  #add the tail
+  system(paste('cat',template_tail,'>>',qsub_file))
+  
+  #show the file header
+  message('qsub file created at ',qsub_file)
+  message('header:')
+  system(paste('head -n 15',qsub_file))
+  
+  #show the  bash command
+  message('the bash command to execute:')
+  cat( cmd,sep = '\n')
+  
+  #show the first R lines
+  message('the 15 firsts lines of Python scripts to execute:')
+  system(paste('head -n 15',python_file))
+  
+  
+  
+  
+}
+
+
+CreateJobForRfile<-function(r_filename,modules='R',loadBashrc=FALSE,conda_env=NULL,nThreads=4,maxHours=24){
+  template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
+  template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
+  
+  r_filename<-str_remove(r_filename,'scripts/')
   dir.create('logs',showWarnings = F)
   log_file=file.path('logs',paste0(str_remove(r_filename,'.R$'),'.log'))
   q_filename=paste0(str_remove(r_filename,'.R$'),'.qsub')

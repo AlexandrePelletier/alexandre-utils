@@ -198,7 +198,7 @@ emmaplot<-function(res_fgsea,
   
   if(!is.null(show_pathway_of)){
     
-    lelist<-lelist[sapply(lelist, function(leadingedges)show_pathway_of%in%leadingedges)]
+    lelist<-lelist[sapply(lelist, function(leadingedges)any(show_pathway_of%in%leadingedges))]
     if(length(lelist)>0){
       pathway_names<-names(lelist)
       
@@ -243,8 +243,13 @@ emmaplot<-function(res_fgsea,
  
 
   if(!is.null(show_pathway_of)){
-    
-    return(p+ggtitle(paste('Enriched pathways with', show_pathway_of)))
+    if(length(show_pathway_of)>1){
+      return(p+ggtitle(paste('Enriched pathways with', show_pathway_of[1],' interactome')))
+      
+    }else{
+      return(p+ggtitle(paste('Enriched pathways with', show_pathway_of)))
+      
+    }
     
   }else{
     return(p)
