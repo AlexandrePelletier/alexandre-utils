@@ -41,6 +41,8 @@ this is a ggplot format so the plot can be saved using
 ggsave('examples_data/emmaplot_top80_fgsea_apoe22_vs_33_microglia.pdf')
 
 ```
+You can see it in `examples_data` folder. here is how it look like:
+![emmaplot](examples_data/emmaplot_top80_fgsea_apoe22_vs_33_microglia.pdf)
 ### Filter pathways by a certain gene
 You can decided to display only the pathway of a certain gene (i.e this gene is in the leading edge genes of the pathway)
 ```r
