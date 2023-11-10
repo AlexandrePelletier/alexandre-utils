@@ -13,7 +13,7 @@ res_fgsea<-fread('examples_data/res_fgsea_apoe22_vs_33_microglia.csv.gz')
 ```
 This data.table should have at least the columns `pathway`, `NES` and `leadingEdge`.  
 
-filter it to show only the top pathways that you want to display.
+filter it to show only the pathways that you want to display.
 For example the top80 enriched based on pvalue
 ```r
 res_fgsea_top<-head(res_fgsea[order(pval)],80)
