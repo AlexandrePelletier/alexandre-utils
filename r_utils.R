@@ -18,6 +18,24 @@ fp<-function(...)file.path(...)
 
 ps<-function(...,sep="",collapse = NULL)paste(...,sep=sep,collapse = collapse)
 
+# Stats Related Functions ####
+CategoricalsToDummy<-function(covs){
+  id_col<-colnames(covs)[as.vector(unlist(covs[,lapply(.SD, function(x)length(unique(x))==.N)]))]
+  num_vars<-colnames(covs[,.SD,.SDcols=is.numeric])
+  cat_vars<-setdiff(colnames(covs)[unlist(covs[,lapply(.SD, function(x)all(table(x)>1))])],num_vars)
+  dum_vars<-c()
+  
+  for(cat in cat_vars){
+    t<-table(as.factor(unlist(covs[,..cat])))
+    lvls<-names(t)[-1]
+    cols<-paste0(cat,lvls)
+    covs[,(cols):=lapply(lvls, function(l)as.numeric(.SD==l)),.SDcols=cat]
+    
+    dum_vars<-c(dum_vars,cols) 
+  }
+  
+  return(covs[,.SD,.SDcols=c(id_col,num_vars,dum_vars)])
+}
 
 
 #Reformatting classical R data/results ####
@@ -569,88 +587,18 @@ freadvcf<-function(file){
 
 
 #GSUB FILES CREATION####
-jobFileCreation<-function(cmd_list,filename,modules=NULL,conda_env=NULL,nThreads=4,maxHours=24){
-  template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
-  template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
-  dir.create('logs',showWarnings = F)
-  file_path<-file.path('scripts',filename)
-  log_file=file.path('logs',paste0(str_remove(filename,'.qsub$'),'.log'))
-  
-  cat('#!/bin/bash -l\n',file = file_path)
-  
-  #add the job parameters
-  proj_name<-'-P tcwlab'
-  CombStdOutErr<-'-j y'
-  maxHours<-paste0('-l h_rt=',maxHours,':00:00')
-  qlog<-paste('-o ',log_file)
-  nThreads<-paste('-pe omp',nThreads)
-  
-  cat( '#Parameters of the Jobs :',file = file_path,append = T)
-  cat( c('\n',proj_name,CombStdOutErr,maxHours,qlog,nThreads),file = file_path,append = T,sep = '\n#$')
-  cat( '\n',file = file_path,append = T,sep = '\n')
-  
-  #add the module to loads
-  if(!is.null(modules)){
-    modules<-ifelse(modules=='R','R/4.2.1',modules)
-    cat( '#Modules to load:',file = file_path,append = T)
-    cat( c('\n',modules),file = file_path,append = T,sep = '\nmodule load ')
-    cat( '\n',file = file_path,append = T,sep = '\n')
-    
-  }
-  
-  #activate conda environment 
-  if(!is.null(conda_env)){
-    cat( '#Conda environment activation:',file = file_path,append = T)
-    cat( c('\n',conda_env),file = file_path,append = T,sep = '\nconda activate ')
-    cat( '\n',file = file_path,append = T,sep = '\n')
-    
-  }
-  
-  
-  
-  #add the header
-  system(paste('cat',template_header,'>>',file_path))
-  
-
-  #add the commandes to exec
-  cmds<-unlist(cmd_list)
-  
-  if(!is.null(names(cmds))){
-    cmds<-unlist(lapply(names(cmds),
-                        function(s)return(c(paste('echo',paste0('"----- Processing of ',s,' -----"')),cmds[[s]]))))
-    
-  }
-  
-  cat( cmds,file = file_path,append = T,sep = '\n')
-  cat( '\n',file = file_path,append = T,sep = '\n')
-  
-  #add the tail
-  system(paste('cat',template_tail,'>>',file_path))
-  
-  #show the file header
-  message('qsub file created at ',file_path)
-  message('header:')
-  system(paste('head -n 15',file_path))
-  
-  #show the first commands
-  message('5 first commands:')
-  cat( head(cmds,5),sep = '\n')
-  
-  
-  
-}
-
-CreateJobFile<-function(cmd_list,filename,modules=NULL,
+CreateJobFile<-function(cmd_list,file,modules=NULL,
                         loadBashrc=FALSE,conda_env=NULL,
                         micromamba_env=NULL,
-                        nThreads=4,maxHours=24){
+                        nThreads=NULL,maxHours=24){
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
-  filename<-str_remove(filename,'scripts/')
+  filename<-basename(file)
+  projdir<-ifelse(str_detect(file,'scripts/'),dirname(dirname(file)),dirname(file))
   
-  dir.create('logs',showWarnings = F)
-  file_path<-file.path('scripts',filename)
-  log_file=file.path('logs',paste0(str_remove(filename,'.qsub$'),'.log'))
+  dir.create(file.path(projdir,'logs'),showWarnings = F)
+  file_path<-file
+  log_file=file.path(projdir,'logs',paste0(str_remove(filename,'.qsub$'),'.log'))
   
   cat('#!/bin/bash -l\n',file = file_path)
   
@@ -659,7 +607,10 @@ CreateJobFile<-function(cmd_list,filename,modules=NULL,
   CombStdOutErr<-'-j y'
   maxHours<-paste0('-l h_rt=',maxHours,':00:00')
   qlog<-paste('-o ',log_file)
-  nThreads<-paste('-pe omp',nThreads)
+  if(!is.null(nThreads)){
+    nThreads<-paste('-pe omp',nThreads)
+    
+  }
   
   cat( '#Parameters of the Jobs :',file = file_path,append = T)
   cat( c('\n',proj_name,CombStdOutErr,maxHours,qlog,nThreads),file = file_path,append = T,sep = '\n#$')
@@ -704,6 +655,12 @@ CreateJobFile<-function(cmd_list,filename,modules=NULL,
   if(!is.null(micromamba_env)){
     cat( '#Micromamba environment activation:',file = file_path,append = T)
     cat( c('\n',micromamba_env),file = file_path,append = T,sep = '\nmicromamba activate ')
+    if('pisces-rabbit'%in%micromamba_env){
+      cat( c('\n# singularity specifics configuration: ',
+             'export SINGULARITY_BIND="$TMP,/restricted/projectnb/tcwlab-adsp/,/projectnb/tcwlab-adsp/,/projectnb/tcwlab/"',
+             'touch .Rprofile'),file = file_path,append = T,sep = '\n')
+
+    }
     cat( '\n',file = file_path,append = T,sep = '\n')
     
   }
@@ -724,6 +681,11 @@ CreateJobFile<-function(cmd_list,filename,modules=NULL,
   }
   
   cat( cmds,file = file_path,append = T,sep = '\n')
+  
+  if('pisces-rabbit'%in%micromamba_env){
+    cat( c('\n# Singularity specifics clean up: ',
+           'rm .Rprofile'),file = file_path,append = T,sep = '\n')
+  }
   cat( '\n',file = file_path,append = T,sep = '\n')
   
   #add the tail
@@ -851,17 +813,19 @@ CreateJobForPyFile<-function(python_file,filename,modules=NULL,
 }
 
 
-CreateJobForRfile<-function(r_filename,modules='R',loadBashrc=FALSE,conda_env=NULL,nThreads=4,maxHours=24){
+CreateJobForRfile<-function(r_file,modules='R',loadBashrc=FALSE,conda_env=NULL,nThreads=4,maxHours=24){
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
+  filename<-basename(r_file)
+  filedir<-str_remove(dirname(r_file),'/scripts')
   
-  r_filename<-str_remove(r_filename,'scripts/')
-  dir.create('logs',showWarnings = F)
-  log_file=file.path('logs',paste0(str_remove(r_filename,'.R$'),'.log'))
-  q_filename=paste0(str_remove(r_filename,'.R$'),'.qsub')
+  dir.create(file.path(filedir,'logs'),showWarnings = F)
+  rfile_path<-r_file
   
-  qfile_path<-file.path('scripts',q_filename)
-  rfile_path<-file.path('scripts',r_filename)
+  qfile_path<-paste0(str_remove(rfile_path,'.R$'),'.qsub')
+
+  
+  log_file=file.path(filedir,'logs',paste0(str_remove(filename,'.R$'),'.log'))
   
   
   cat('#!/bin/bash -l\n',file = qfile_path)
@@ -932,9 +896,7 @@ CreateJobForRfile<-function(r_filename,modules='R',loadBashrc=FALSE,conda_env=NU
 }
 
 RunQsub<-function(qsub_file,job_name,proj_name='tcwlab',wait_for=NULL){
-  if(!str_detect(qsub_file,'scripts/')){
-    qsub_file<-fp('scripts',qsub_file)
-  }
+
   if(is.null(wait_for)){
     cmd<-paste('qsub','-N',job_name,qsub_file,proj_name)
     system(cmd)
