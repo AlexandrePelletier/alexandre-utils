@@ -3,7 +3,10 @@
 ## emmaplot function 
 
 For Network visualisation of fgsea results using emmaplot function   
-
+```r
+library(data.table)
+source('emmaplot.R')
+```
 First, load some fgsea results
 ```r
 res_fgsea<-fread('examples_data/res_fgsea_apoe22_vs_33_microglia.csv.gz')
