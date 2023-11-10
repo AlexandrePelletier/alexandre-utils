@@ -18,6 +18,8 @@ fp<-function(...)file.path(...)
 
 ps<-function(...,sep="",collapse = NULL)paste(...,sep=sep,collapse = collapse)
 
+source<-function(file,chdir=TRUE)base::source(file,chdir = chdir)
+
 # Stats Related Functions ####
 CategoricalsToDummy<-function(covs){
   id_col<-colnames(covs)[as.vector(unlist(covs[,lapply(.SD, function(x)length(unique(x))==.N)]))]
