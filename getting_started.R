@@ -1,6 +1,6 @@
 
 library(data.table)
-source('../../utils/visualisation.R')
+source('../../utils/emmaplot.R')
 
 #Network visualisation of fgsea results using emmaplot function ####
 #load fgsea results
