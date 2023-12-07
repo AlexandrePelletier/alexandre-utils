@@ -1,9 +1,13 @@
 #ALL PCA BASED ANALYSIS UTILITIES
 
 
-RunPca<-function(norm_mat,features=NULL,scale=TRUE){
-    norm_matf<-norm_mat[rowSums(is.na(norm_mat))==0,]
-    norm_matf<-norm_matf[which(apply(norm_matf, 1, var)!=0),]
+RunPca<-function(norm_mat,scale=TRUE,remove_incomplete_rows=T){
+  #return  the PCA of the transposed matrix : if the samples are the columns, factors will be estimated by samples
+  if(remove_incomplete_rows){
+    norm_mat<-norm_mat[rowSums(is.na(norm_mat))==0,] #remove feature with NA
+    
+  }
+    norm_mat<-norm_mat[which(apply(norm_matf, 1, var)!=0),] #remove feature without variance
     message('removing ',nrow(norm_mat)-nrow(norm_matf),' features (',nrow(norm_matf), 'remaining) because missing value or without variance')
     return(prcomp(t(norm_matf),scale.=scale))
     
@@ -45,7 +49,9 @@ PcaPlot<-function(pca,mtd,group.by, pc_x='PC1', pc_y='PC2',sample_col='sample_id
 
 
 
-CorrelCovarPCs<-function(pca,mtd,sample_col='sample',vars_num=NULL,vars_fac=NULL,rngPCs=1:10,res="pval",seuilP=0.1,return=TRUE,plot=TRUE){
+CorrelCovarPCs<-function(pca,mtd,
+                         sample_col='sample',vars_num=NULL,
+                         vars_fac=NULL,rngPCs=1:10,res="pval",seuilP=0.1,return=TRUE,plot.results=FALSE){
   require(data.table)
   
   pcs<-data.frame(pca$x)
@@ -117,7 +123,8 @@ CorrelCovarPCs<-function(pca,mtd,sample_col='sample',vars_num=NULL,vars_fac=NULL
   
   final_res<-rbind(res.num,res.fac)
   final_res<-data.matrix(final_res)
-  if(plot){
+  
+  if(plot.results){
     require(pheatmap)
     resToPlot<-final_res
     if(res=="pval"){
@@ -135,11 +142,14 @@ CorrelCovarPCs<-function(pca,mtd,sample_col='sample',vars_num=NULL,vars_fac=NULL
     pct.varPCs<-pctPC(pca,rngPCs)*100
     vars<-rownames(resToPlot)
     
-    pheatmap(resToPlot[vars,rngPCs],cluster_rows = F,cluster_cols = F,
-             labels_col= paste0(names(rngPCs),"(",round(pct.varPCs[names(rngPCs)],0),"%)"),
-             display_numbers = T,
-             color = colorRampPalette(c("white", "red"))(13), breaks = breakRes)
+    if(plot.results){
+      plotPvalsHeatMap(resToPlot[vars,rngPCs],
+                       labels_col= paste0(names(rngPCs),"(",round(pct.varPCs[names(rngPCs)],0),"%)"),
+                       col_breaks = breakRes)
+      
+    }
     
+ 
   }
   
   
@@ -154,17 +164,28 @@ CorrelCovarPCs<-function(pca,mtd,sample_col='sample',vars_num=NULL,vars_fac=NULL
 }
 
 
-plotPvalsHeatMap<-function(pvals_mat,p.thr=0.1,col_breaks=c(40,20,10:1, 0.5,0.1),cluster_rows = F,cluster_cols = F){
+plotPvalsHeatMap<-function(pvals_mat,main='-log10(Pvalue)',p.thr=0.1,col_breaks=c(20,10:1, 0.5,0.1),
+                           legend_breaks=NA,cluster_rows = F,cluster_cols = F,
+                           labels_col=NULL,
+                           labels_row=NULL,
+                           fontsize=10,
+                           fontsize_number = 0.8*fontsize){
   require(pheatmap)
   
   pvals_mat[which(pvals_mat>p.thr)]<-1 #### put them to 1 if less than 0.1
   pvals_mat<--log10(pvals_mat)
   
   vars<-rownames(pvals_mat)
-  
-  pheatmap(pvals_mat,cluster_rows = cluster_rows,cluster_cols = cluster_cols,
+
+  pheatmap(pvals_mat,main = main,
+           cluster_rows = cluster_rows,cluster_cols = cluster_cols,
            display_numbers = T,
-           color = colorRampPalette(c("white", "red"))(13), breaks = col_breaks)
+           fontsize = fontsize,
+           fontsize_number = fontsize_number,
+           labels_col=labels_col,
+           labels_row=labels_row,
+           color = colorRampPalette(c("white", "red"))(length(col_breaks)-1),
+           breaks = sort(col_breaks),legend_breaks = legend_breaks)
   
 }
 

@@ -165,7 +165,7 @@ emmaplot<-function(res_fgsea,
   
   if(!is.null(show_pathway_of)){
     if(length(show_pathway_of)>1){
-      return(p+ggtitle(paste('Enriched pathways with', show_pathway_of[1],' interactome')))
+      return(p+ggtitle(paste('Enriched pathways for selected genes')))
       
     }else{
       return(p+ggtitle(paste('Enriched pathways with', show_pathway_of)))

@@ -596,7 +596,10 @@ CreateJobFile<-function(cmd_list,file,modules=NULL,
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
   filename<-basename(file)
-  projdir<-ifelse(str_detect(file,'scripts/'),dirname(dirname(file)),dirname(file))
+  projdir<-dirname(file)
+  while(str_detect(projdir,'scripts')){
+    projdir<-dirname(projdir)
+  }
   
   dir.create(file.path(projdir,'logs'),showWarnings = F)
   file_path<-file
@@ -712,14 +715,17 @@ CreateJobForPyFile<-function(python_file,modules=NULL,
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
   
+  filename<-basename(python_file)
+  projdir<-ifelse(str_detect(python_file,'scripts/'),dirname(dirname(python_file)),dirname(python_file))
+  
+  
   #create qsub file
-  filename<-str_remove(str_remove(python_file,'scripts/'),'.py$')
-  qsub_file<-file.path('scripts',paste0(filename,'.qsub'))
+  qsub_file<-str_replace(python_file,'\\.py$','.qsub')
   cat('#!/bin/bash -l\n',file = qsub_file)
   
   #create log file
-  dir.create('logs',showWarnings = F)
-  log_file=file.path('logs',paste0(filename,'.log'))
+  dir.create(file.path(projdir,'logs'),showWarnings = F)
+  log_file=file.path(projdir,'logs',str_replace(filename,'\\.py$','.log'))
   
   
   #add the job parameters
@@ -769,7 +775,7 @@ CreateJobForPyFile<-function(python_file,modules=NULL,
     
   }
   
-  #activate conda environment 
+  #activate micromamba environment 
   if(!is.null(micromamba_env)){
     cat( '#Micromamba environment activation:',file = qsub_file,append = T)
     cat( c('\n',micromamba_env),file = qsub_file,append = T,sep = '\nmicromamba activate ')
@@ -812,21 +818,24 @@ CreateJobForPyFile<-function(python_file,modules=NULL,
 
 
 CreateJobForRfile<-function(r_file,modules='R',
-                            loadBashrc=FALSE,conda_env=NULL,
+                            loadBashrc=FALSE,conda_env=NULL,micromamba_env=NULL,
                             nThreads=4,memPerCore=NULL,maxHours=24){
   
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
   
+  filename<-basename(r_file)
+  projdir<-ifelse(str_detect(r_file,'scripts/'),dirname(dirname(r_file)),dirname(r_file))
+  
+  
   #create qsub file
-  filename<-str_remove(str_remove(r_file,'scripts/'),'.R$')
-  qsub_file<-file.path('scripts',paste0(filename,'.qsub'))
+  qsub_file<-str_replace(r_file,'\\.R$','.qsub')
   cat('#!/bin/bash -l\n',file = qsub_file)
   
   #create log file
-  dir.create('logs',showWarnings = F)
-  log_file=file.path('logs',paste0(filename,'.log'))
-  
+  dir.create(file.path(projdir,'logs'),showWarnings = F)
+  log_file=file.path(projdir,'logs',str_replace(filename,'\\.R$','.log'))
+
   
   #add the job parameters
   proj_name<-'-P tcwlab'
@@ -859,6 +868,14 @@ CreateJobForRfile<-function(r_file,modules='R',
   if(!is.null(conda_env)){
     cat( '#Conda environment activation:',file = qsub_file,append = T)
     cat( c('\n',conda_env),file = qsub_file,append = T,sep = '\nconda activate ')
+    cat( '\n',file = qsub_file,append = T,sep = '\n')
+    
+  }
+  
+  #activate micromamba environment 
+  if(!is.null(micromamba_env)){
+    cat( '#Micromamba environment activation:',file = qsub_file,append = T)
+    cat( c('\n',micromamba_env),file = qsub_file,append = T,sep = '\nmicromamba activate ')
     cat( '\n',file = qsub_file,append = T,sep = '\n')
     
   }
@@ -898,17 +915,68 @@ RunQsub<-function(qsub_file,job_name,proj_name='tcwlab',wait_for=NULL){
 
   if(is.null(wait_for)){
     cmd<-paste('qsub','-N',job_name,qsub_file,proj_name)
-    system(cmd)
+ 
   }else{
     cmd<-paste('qsub',
                '-N',job_name,
                '-hold_jid',wait_for,
                qsub_file,proj_name)
-    system(cmd)
+  }
+  message<-system(cmd,intern = TRUE)
+  jobid<-str_extract(message,'[0-9]+')
+  message(message)
+  return(jobid)
+}
+
+
+
+WaitQsub<-function(qsub_file,jobid,max_hours=24){
+  filename<-basename(qsub_file)
+  projdir<-dirname(qsub_file)
+  t0 <- Sys.time()
+  
+  while(str_detect(projdir,'scripts')){
+    projdir<-dirname(projdir)
+  }
+  log_file=file.path(projdir,'logs',paste0(str_remove(filename,'.qsub$'),'.log'))
+  
+  max_sec=max_hours*60*60
+  
+  
+  while(!file.exists(log_file)){
+    Sys.sleep(60)
+    t1 <- Sys.time()
+    d<-t1-t0
+    if(d>max_sec)stop('time reached max limits')
     
   }
-
+  
+  jobid_inlog=str_extract(tail(grep('job ID :',
+                              readLines(con = log_file,skipNul = TRUE),
+                              value = T),n = 1),'[0-9]+$')
+  while(jobid!=jobid_inlog){
+    Sys.sleep(60)
+    t1 <- Sys.time()
+    d<-t1-t0
+    if(d>max_sec)stop('time reached max limits')
+    
+  }
+  
+  pattern=paste('Finished Analysis for job',jobid)
+  lastlines<-tail(readLines(con = log_file,skipNul = TRUE))
+  
+  while(any(str_detect(lastlines,pattern)) ){
+    Sys.sleep(120)
+    lastlines<-tail(readLines(con = log_file,skipNul = TRUE))
+    t1 <- Sys.time()
+    d<-t1-t0
+    if(d>max_sec)stop('time reached max limits')
+  }
+  message(pattern,' after', round(d/360,2),' hours')
+  
+  
 }
+
 
 #bash tools wrapper####
 bed_inter<- function(a, b, opt1="-wa", opt2="-wb",out_dir=".", select=NULL, col.names=NULL){
