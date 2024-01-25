@@ -51,7 +51,7 @@ echo "=========================================================="
 module load R/4.2.1
 
 #Your command line:
-Rscript scripts/01-featurecounts_astro.R >> logs/01.log
+Rscript scripts/01-featurecounts_astro.R >> logs/01.log #here we run R script using 'Rscript' command
 
 
 
