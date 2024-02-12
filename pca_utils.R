@@ -1,15 +1,23 @@
 #ALL PCA BASED ANALYSIS UTILITIES
 
+require('ggplot2')
 
-RunPca<-function(norm_mat,scale=TRUE,remove_incomplete_rows=T){
+RunPca<-function(norm_mat,scale=TRUE,imputation=NULL,center=TRUE){
   #return  the PCA of the transposed matrix : if the samples are the columns, factors will be estimated by samples
-  if(remove_incomplete_rows){
+  n_features_init<-nrow(norm_mat)
+  if(is.null(imputation)){
     norm_mat<-norm_mat[rowSums(is.na(norm_mat))==0,] #remove feature with NA
+    norm_mat<-norm_mat[which(apply(norm_mat, 1, var)!=0),] #remove feature without variance
+    n_features_qc<-nrow(norm_mat)
+    message('removing ',n_features_init-n_features_qc,' features (',n_features_qc, 'remaining) because missing value or without variance')
+    
+  }else if(stringr::str_to_lower(imputation)%in%c('soft','softimpute')){
+    norm_mat<-softImpute::complete(norm_mat, softImpute::softImpute(norm_mat))
     
   }
-    norm_mat<-norm_mat[which(apply(norm_matf, 1, var)!=0),] #remove feature without variance
-    message('removing ',nrow(norm_mat)-nrow(norm_matf),' features (',nrow(norm_matf), 'remaining) because missing value or without variance')
-    return(prcomp(t(norm_matf),scale.=scale))
+  
+  
+    return(prcomp(t(norm_mat),scale.=scale,center=center))
     
 }
 
@@ -23,19 +31,39 @@ pctPC<-function(pca,rngPCs="all"){
 }
 
 
-PcaPlot<-function(pca,mtd,group.by, pc_x='PC1', pc_y='PC2',sample_col='sample_id',scale=TRUE,return_pcs_mtd=FALSE){
+PcaPlot<-function(pca,mtd,group.by, pc_x='PC1', pc_y='PC2',
+                  sample_col='sample_id',scale=TRUE,return_pcs_mtd=FALSE,label=FALSE){
+  require('ggrepel')
+  require('patchwork')
   
-  pca_dt<-merge(data.table(pca$x,keep.rownames = sample_col),mtd)
-  
+  pca_dt<-data.table(pca$x,keep.rownames = sample_col)[mtd,on=sample_col]
   pctpcs<-pctPC(pca)
   
+  pca_dt_toplot<-unique(pca_dt,by=sample_col)
+  pca_dt_toplot[,sample_id:=.SD,.SDcols=sample_col]
+  if(all(is.character(label))){
+    pca_dt_toplot[,sample_to_label:=sample_id%in%label]
+    label<-TRUE
+  }else{
+    pca_dt_toplot[,sample_to_label:=label]
+    label<-TRUE
+    
+  }
   ps<-lapply(group.by, function(c){
-    p<-ggplot(pca_dt)+geom_point(aes_string(x=pc_x,y=pc_y,col=c))+
+    p<-ggplot(pca_dt_toplot,aes_string(x=pc_x,y=pc_y))+geom_point(aes_string(col=c))+
       labs(x=paste0(pc_x,' (',round(pctpcs[pc_x]*100),'%)'),
            y=paste0(pc_y,' (',round(pctpcs[pc_y]*100),'%)'))+
       theme_bw()
     return(p+ggtitle(c))
   })
+  
+  if(label){
+    ps<-lapply(ps, function(p){
+      p<-p+geom_text_repel(aes(label=ifelse(sample_to_label,sample_id,'')),
+                                      max.overlaps =1000)
+      return(p)
+    })
+  }
   
   
   if(return_pcs_mtd){

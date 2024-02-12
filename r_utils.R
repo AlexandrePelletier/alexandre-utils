@@ -22,25 +22,47 @@ source<-function(file,chdir=TRUE)base::source(file,chdir = chdir)
 
 # Stats Related Functions ####
 CategoricalsToDummy<-function(covs){
-  id_col<-colnames(covs)[as.vector(unlist(covs[,lapply(.SD, function(x)length(unique(x))==.N)]))]
-  num_vars<-colnames(covs[,.SD,.SDcols=is.numeric])
-  cat_vars<-setdiff(colnames(covs)[unlist(covs[,lapply(.SD, function(x)all(table(x)>1))])],num_vars)
+  covs2<-copy(covs)
+  id_col<-colnames(covs2)[as.vector(unlist(covs2[,lapply(.SD, function(x)length(unique(x))==.N)]))]
+  num_vars<-colnames(covs2[,.SD,.SDcols=is.numeric])
+  cat_vars<-setdiff(colnames(covs2)[unlist(covs2[,lapply(.SD, function(x)all(table(x)>1))])],num_vars)
+  others_vars<-setdiff(colnames(covs2),c(num_vars,cat_vars,id_col))
+  message(paste(others_vars,collapse = ', '),' are categorical variables with only 1 sample falling in one category, so wont be Dummyfied')
   dum_vars<-c()
   
   for(cat in cat_vars){
-    t<-table(as.factor(unlist(covs[,..cat])))
+    t<-table(as.factor(unlist(covs2[,..cat])))
     lvls<-names(t)[-1]
     cols<-paste0(cat,lvls)
-    covs[,(cols):=lapply(lvls, function(l)as.numeric(.SD==l)),.SDcols=cat]
+    covs2[,(cols):=lapply(lvls, function(l)as.numeric(.SD==l)),.SDcols=cat]
     
     dum_vars<-c(dum_vars,cols) 
   }
   
-  return(covs[,.SD,.SDcols=c(id_col,num_vars,dum_vars)])
+  return(covs2[,.SD,.SDcols=c(id_col,num_vars,others_vars,dum_vars)])
 }
 
 
+
 #Reformatting classical R data/results ####
+
+
+RemoveUselessColumns<-function(x,key_cols='sample_id',pattern_to_exclude=NULL){
+  #keep only unconstant variables
+  nums_to_keep<-names(which(x[,sapply(.SD,function(x)(!all(is.na(x)))&var(x,na.rm = T)!=0),.SDcols=is.numeric]))
+  
+  cats_to_keep<-names(which(x[,sapply(.SD,function(x)(!all(is.na(x)))&length(unique(x))!=.N&length(unique(x))!=1),.SDcols=!is.numeric]))
+  
+  if(!is.null(pattern_to_exclude)){
+    nums_to_keep<-nums_to_keep[!str_detect(nums_to_keep,pattern_to_exclude)]
+    cats_to_keep<-cats_to_keep[!str_detect(cats_to_keep,pattern_to_exclude)]
+    
+  }
+  cols_to_keep<-c(key_cols,nums_to_keep,cats_to_keep)
+  
+  return(x[,.SD,.SDcols=cols_to_keep])
+}
+
 DetectDEResFormat<-function(res_de){
   
   if(all(c('log2FoldChange','padj')%in%colnames(res_de)))return('DESEQ2')
@@ -589,7 +611,7 @@ freadvcf<-function(file){
 
 
 #GSUB FILES CREATION####
-CreateJobFile<-function(cmd_list,file,modules=NULL,
+CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
                         loadBashrc=FALSE,conda_env=NULL,
                         micromamba_env=NULL,
                         nThreads=NULL,memPerCore=NULL,maxHours=24){
@@ -608,7 +630,7 @@ CreateJobFile<-function(cmd_list,file,modules=NULL,
   cat('#!/bin/bash -l\n',file = file_path)
   
   #add the job parameters
-  proj_name<-'-P tcwlab'
+  proj_name<-paste('-P ',proj_name)
   CombStdOutErr<-'-j y'
   maxHours<-paste0('-l h_rt=',maxHours,':00:00')
   qlog<-paste('-o ',log_file)
@@ -678,7 +700,7 @@ CreateJobFile<-function(cmd_list,file,modules=NULL,
 
   if(!is.null(names(cmd_list))){
     cmds<-unlist(lapply(names(cmd_list),
-                        function(s)return(c(paste('echo',paste0('"----- Processing of ',s,' -----"')),cmds[[s]]))))
+                        function(s)return(c(paste('echo',paste0('"----- Processing of ',s,' -----"')),cmd_list[[s]]))))
     
   }else{
     cmds<-unlist(cmd_list)
@@ -708,7 +730,7 @@ CreateJobFile<-function(cmd_list,file,modules=NULL,
   
 }
 
-CreateJobForPyFile<-function(python_file,modules=NULL,
+CreateJobForPyFile<-function(python_file,proj_name='tcwlab',modules=NULL,
                         loadBashrc=FALSE,conda_env=NULL,
                         micromamba_env=NULL,
                         nThreads=4,memPerCore=NULL,maxHours=24){
@@ -729,7 +751,7 @@ CreateJobForPyFile<-function(python_file,modules=NULL,
   
   
   #add the job parameters
-  proj_name<-'-P tcwlab'
+  proj_name<-paste('-P ',proj_name)
   CombStdOutErr<-'-j y'
   maxHours<-paste0('-l h_rt=',maxHours,':00:00')
   qlog<-paste('-o ',log_file)
@@ -817,7 +839,8 @@ CreateJobForPyFile<-function(python_file,modules=NULL,
 }
 
 
-CreateJobForRfile<-function(r_file,modules='R',
+CreateJobForRfile<-function(r_file,proj_name='tcwlab',
+                            modules='R',
                             loadBashrc=FALSE,conda_env=NULL,micromamba_env=NULL,
                             nThreads=4,memPerCore=NULL,maxHours=24){
   
@@ -838,7 +861,7 @@ CreateJobForRfile<-function(r_file,modules='R',
 
   
   #add the job parameters
-  proj_name<-'-P tcwlab'
+  proj_name<-paste('-P ',proj_name)
   CombStdOutErr<-'-j y'
   maxHours<-paste0('-l h_rt=',maxHours,':00:00')
   qlog<-paste('-o ',log_file)
@@ -911,8 +934,11 @@ CreateJobForRfile<-function(r_file,modules='R',
   
 }
 
-RunQsub<-function(qsub_file,job_name,proj_name='tcwlab',wait_for=NULL){
-
+RunQsub<-function(qsub_file,job_name,proj_name=NULL,wait_for=NULL){
+  if(!str_detect(qsub_file,'.qsub$'))qsub_file=paste0(tools::file_path_sans_ext(qsub_file),'.qsub')
+  
+  if(!file.exists(qsub_file))stop(qsub_file,' do not exist')
+  
   if(is.null(wait_for)){
     cmd<-paste('qsub','-N',job_name,qsub_file,proj_name)
  
@@ -923,14 +949,19 @@ RunQsub<-function(qsub_file,job_name,proj_name='tcwlab',wait_for=NULL){
                qsub_file,proj_name)
   }
   message<-system(cmd,intern = TRUE)
-  jobid<-str_extract(message,'[0-9]+')
-  message(message)
-  return(jobid)
+  message(paste(message,collapse = '\n'))
+  
+  jobid<-ifelse(str_detect(message,'has been submitted'),str_extract(message,'[0-9]+'),NA)
+  return(jobid[!is.na(jobid)])
 }
 
 
 
 WaitQsub<-function(qsub_file,jobid,max_hours=24){
+  if(!str_detect(qsub_file,'.qsub$'))qsub_file=paste0(tools::file_path_sans_ext(qsub_file),'.qsub')
+  
+  if(!file.exists(qsub_file))stop(qsub_file,' do not exist')
+  
   filename<-basename(qsub_file)
   projdir<-dirname(qsub_file)
   t0 <- Sys.time()
@@ -965,7 +996,7 @@ WaitQsub<-function(qsub_file,jobid,max_hours=24){
   pattern=paste('Finished Analysis for job',jobid)
   lastlines<-tail(readLines(con = log_file,skipNul = TRUE))
   
-  while(any(str_detect(lastlines,pattern)) ){
+  while(!any(str_detect(lastlines,pattern)) ){
     Sys.sleep(120)
     lastlines<-tail(readLines(con = log_file,skipNul = TRUE))
     t1 <- Sys.time()

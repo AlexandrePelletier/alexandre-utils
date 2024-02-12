@@ -1,5 +1,5 @@
 
 echo "=========================================================="
-echo "Finished Analysis for $PROJ_NAME on : $(date)"
+echo "Finished Analysis for job $JOB_ID on : $(date)"
 echo "=========================================================="
 

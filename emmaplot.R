@@ -8,10 +8,20 @@ require(ggraph)
 #get sim matrix
 
 LeadingEdges<-function(res_fgsea){
-  l_genes<-str_extract_all(res_fgsea$leadingEdge,'[A-Za-z0-9]+')
-  l_genes<-lapply(l_genes, function(x)x[x!='c'])
-  names(l_genes)<-res_fgsea$pathway
-  return(l_genes)
+  if(all(c('term','n.overlap','genes.overlap')%in%colnames(res_fgsea))){
+    l_genes<-str_extract_all(res_fgsea$genes.overlap,'[A-Za-z0-9]+')
+    l_genes<-lapply(l_genes, function(x)x[x!='c'])
+    names(l_genes)<-res_fgsea$pathway
+    return(l_genes)
+    
+  }else{
+    l_genes<-str_extract_all(res_fgsea$leadingEdge,'[A-Za-z0-9]+')
+    l_genes<-lapply(l_genes, function(x)x[x!='c'])
+    names(l_genes)<-res_fgsea$pathway
+    return(l_genes)
+  }
+  
+ 
 }
 
 overlap_ratio <- function(x, y) {
@@ -111,7 +121,11 @@ emmaplot<-function(res_fgsea,
                    max.overlaps=10){
   require('ggrepel')
   
-  
+  if(all(c('term','n.overlap')%in%colnames(res_fgsea))){
+    res_fgsea[,pathway:=term]
+    res_fgsea[,NES:=fold.enrichment]
+    
+  }
   
   if(is.null(pathway_names))pathway_names=res_fgsea[order(pval)]$pathway
   
