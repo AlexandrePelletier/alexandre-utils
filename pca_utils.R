@@ -32,9 +32,10 @@ pctPC<-function(pca,rngPCs="all"){
 
 
 PcaPlot<-function(pca,mtd,group.by, pc_x='PC1', pc_y='PC2',
-                  sample_col='sample_id',scale=TRUE,return_pcs_mtd=FALSE,label=FALSE){
+                  sample_col='sample_id',scale=TRUE,return_pcs_mtd=FALSE,label=FALSE,ncol=NULL){
   require('ggrepel')
   require('patchwork')
+  
   
   pca_dt<-data.table(pca$x,keep.rownames = sample_col)[mtd,on=sample_col]
   pctpcs<-pctPC(pca)
@@ -67,132 +68,95 @@ PcaPlot<-function(pca,mtd,group.by, pc_x='PC1', pc_y='PC2',
   
   
   if(return_pcs_mtd){
-    print(wrap_plots(ps))
+    print(wrap_plots(ps,ncol = ncol))
     return(pca_dt)
   }
   else{
-    return(wrap_plots(ps))
+    return(wrap_plots(ps,ncol = ncol))
   }
 }
 
 
 
 CorrelCovarPCs<-function(pca,mtd,
-                         sample_col='sample',vars_num=NULL,
-                         vars_fac=NULL,rngPCs=1:10,res="pval",seuilP=0.1,return=TRUE,plot.results=FALSE){
+                         sample_col='sample_id',vars_num=NULL,
+                         vars_cat=NULL,rngPCs=1:10){
   require(data.table)
   
+  if(!sample_col%in%colnames(mtd)){
+    stop(sample_col,' is not present in the metadata, please specify correct sample id column name')
+  }
+  
+  if(!'data.table'%in%class(mtd)){
+    mtd<-data.table(mtd)
+  }
   pcs<-data.frame(pca$x)
   names(rngPCs)<-paste0('PC',rngPCs)
   
-  #if(is.null(vars_num))vars_num=colnames(mtd)[sapply(mtd, is.numeric)]
-  #if(is.null(vars_fac))vars_fac=colnames(mtd)[!sapply(mtd, is.numeric)&colnames(mtd)!=sample_col]
-  
-  
-  if(is.data.table(mtd)){
-    mtd[,(vars_fac):=lapply(.SD,as.factor),.SDcols=vars_fac]
+  if(is.null(vars_num))
+    vars_num=colnames(mtd)[sapply(mtd, is.numeric)]
+  if(is.null(vars_cat))
+    vars_cat=colnames(mtd)[!sapply(mtd, is.numeric)&colnames(mtd)!=sample_col]
+
+  mtd[,(vars_cat):=lapply(.SD,as.factor),.SDcols=vars_cat]
     
-    mtd<-data.frame(mtd,row.names = sample_col)
-  }
-  
   if(length(vars_num)>0){
-    mtd_num=mtd[rownames(pcs),vars_num]
-    mtd_num=t(mtd_num)
-    split_num=split(mtd_num,rownames(mtd_num))
-    res_num=lapply(split_num,function(x,ret=res){
-      FAC1.p<-rep(0,length(rngPCs))
-      FAC1.r2<-rep(0,length(rngPCs))
-      for (i in rngPCs){
-        FAC1<-as.numeric(x)
-        FAC1<-lm(pcs[,i]~FAC1)
-        FAC1.p[i]<-anova(FAC1)$Pr[1]
-        FAC1.r2[i]<-summary(FAC1)$adj.r.squared
-      }
-      if(ret=="pval"){
-        return(FAC1.p)
-      }else if(ret=="r2"){
-        return(FAC1.r2)
-      }
-    })
     
-    res.num<-do.call(rbind,res_num)
+    res_num<-rbindlist(lapply(vars_num,function(f){
+      
+      res<-rbindlist(lapply(rngPCs,function(i){
+        mod<-lm(pcs[,i]~as.numeric(unlist(mtd[rownames(pcs),..f,on=sample_col])))
+        
+        summstats<-summary(mod)
+        data.table(PC=paste0('PC',i),
+                   p=summstats$coefficients[2,4],
+                   beta=summstats$coefficients[2,1],
+                   R2=summstats$adj.r.squared)
+        
+      }))
+      
+      return(res[,factor:=f])
+      
+    }))
+    
+   
+  }else{
+    
+    res_num<-data.table()
+  }
+  
+  if(length(vars_cat)>0){
+    
+    res_fac<-rbindlist(lapply(vars_cat,function(f){
+      
+      res<-rbindlist(lapply(rngPCs,function(i){
+        mod<-lm(pcs[,i]~as.factor(unlist(mtd[rownames(pcs),..f,on=sample_col])))
+        
+        summstats<-summary(mod)
+        data.table(PC=paste0('PC',i),
+                   p=anova(mod)$Pr[1],
+                   R2=summstats$adj.r.squared)
+        
+      }))
+      
+      return(res[,factor:=f])
+      
+    }))
     
   }else{
-    res.num<-data.frame()
-  }
-  
-  
-  if(length(vars_fac)>0){
-    mtd_fac=mtd[rownames(pcs),vars_fac]
+    res_fac<-data.table()
     
-    mtd_fac<-mtd_fac[,sapply(mtd_fac, function(x)length(levels(x))>1)]
-    mtd_fac=t(mtd_fac)
-    split_fac=split(mtd_fac,rownames(mtd_fac))
-    res_fac=lapply(split_fac,function(x,ret=res){
-      FAC1.p<-rep(0,length(rngPCs))
-      FAC1.r2<-rep(0,length(rngPCs))
-      for (i in rngPCs){
-        FAC1<-as.factor(x)
-        FAC1<-lm(pcs[,i]~FAC1)
-        FAC1.p[i]<- anova(FAC1)$Pr[1]
-        FAC1.r2[i]<-summary(FAC1)$adj.r.squared
-      }
-      if(ret=="pval"){
-        return(FAC1.p)
-      }else if(ret=="r2"){
-        return(FAC1.r2)
-      }})
-    res.fac<-do.call(rbind,res_fac)
-    
-  }else{
-    res.fac<-data.frame()
     
   }
-  
-  final_res<-rbind(res.num,res.fac)
-  final_res<-data.matrix(final_res)
-  
-  if(plot.results){
-    require(pheatmap)
-    resToPlot<-final_res
-    if(res=="pval"){
-      
-      resToPlot[which(resToPlot>seuilP)]<-1 ####here I basicaly put them to 1 if less than 0.1
-      resToPlot<--log10(resToPlot)
-      breakRes<-c(40,20,10:1, 0.5,0.1)
-    }else{
-      resToPlot[resToPlot<0]<-0
-      resToPlot<-resToPlot
-      breakRes<-NA
-      
-    }
-    
-    pct.varPCs<-pctPC(pca,rngPCs)*100
-    vars<-rownames(resToPlot)
-    
-    if(plot.results){
-      plotPvalsHeatMap(resToPlot[vars,rngPCs],
-                       labels_col= paste0(names(rngPCs),"(",round(pct.varPCs[names(rngPCs)],0),"%)"),
-                       col_breaks = breakRes)
-      
-    }
-    
- 
-  }
-  
-  
-  
-  if(return){
-    colnames(final_res)<-paste0("PC",rngPCs)
-    return(final_res) 
-  }
-  
-  
+  res_all<-rbind(res_num,res_fac,fill=TRUE)
+  res_all[,padj:=p.adjust(p),by='PC']
+  return(res_all)
   
 }
 
 
-plotPvalsHeatMap<-function(pvals_mat,main='-log10(Pvalue)',p.thr=0.1,col_breaks=c(20,10:1, 0.5,0.1),
+plotPvalsHeatMap<-function(x,main='-log10(Pvalue)',
+                           p_col='p',p.thr=0.1,col_breaks=c(20,10:1, 0.5,0.1),
                            legend_breaks=NA,cluster_rows = F,cluster_cols = F,
                            labels_col=NULL,
                            labels_row=NULL,
@@ -200,6 +164,12 @@ plotPvalsHeatMap<-function(pvals_mat,main='-log10(Pvalue)',p.thr=0.1,col_breaks=
                            fontsize_number = 0.8*fontsize){
   require(pheatmap)
   
+  if(p_col%in%colnames(x)){
+    pvals_mat<-as.matrix(data.frame(dcast(x,factor~PC,value.var = p_col),row.names = 'factor'))
+    
+  }else{
+    pvals_mat<-x
+  }
   pvals_mat[which(pvals_mat>p.thr)]<-1 #### put them to 1 if less than 0.1
   pvals_mat<--log10(pvals_mat)
   
