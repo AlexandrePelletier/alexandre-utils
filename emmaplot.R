@@ -30,6 +30,7 @@ overlap_ratio <- function(x, y) {
   length(intersect(x, y))/length(unique(c(x,y)))
 }
 
+
 get_similarity_matrix <- function(leading_edge_list) {
   
   n <- length(leading_edge_list)
@@ -44,13 +45,16 @@ get_similarity_matrix <- function(leading_edge_list) {
   }
   return(w)
 }
-
+ 
 
 # get graph of sim
 get_igraph <- function(res_fgsea, simmat,leading_edge_list,
-                       pathway_names, col.var, min_edge) {
+                       pathway_names=NULL, min_edge=0.2, col.var=NULL) {
   if(any(duplicated(res_fgsea$pathway)))stop('error: duplicated pathways')
   
+  if(is.null(pathway_names)){
+    pathway_names<-res_fgsea$pathway
+  }
   wd <- reshape2::melt(simmat[pathway_names,pathway_names])
   wd <- wd[wd[,1] != wd[,2],]
   # remove NA
@@ -71,33 +75,48 @@ get_igraph <- function(res_fgsea, simmat,leading_edge_list,
   
   V(g)$size <- cnt[V(g)$name]
   
-  colVar <- as.numeric(as.vector(res_fgseaf[V(g)$name, on='pathway'][,.SD,.SDcols=col.var][[1]]))
-  
-  V(g)$colvar <- colVar
-  
+  if(!is.null(col.var)){
+    colVar <- as.vector(res_fgseaf[V(g)$name, on='pathway'][,.SD,.SDcols=col.var][[1]])
+    V(g)$colvar <- colVar
+    
+  }
+
   return(g)
 }
 
 
 #plot the graphs
-add_category_nodes <- function(p,col.var,cols=cols) {
-  locol=cols[1]
-  midcol=ifelse(length(cols==3),cols[2],NULL)
-  hicol=cols[-1]
+add_category_nodes <- function(p,col.var,cols=c('blue','white','red')) {
   
+  if(!'discrete'%in%cols){
+    locol=cols[1]
+    midcol=ifelse(length(cols==3),cols[2],NULL)
+    hicol=cols[-1]
+    
+  }
+
   p<-p + ggnewscale::new_scale_fill() +geom_point(shape = 21, aes_(x =~ x, y =~ y, fill =~ colvar,
                                                                    size =~ size)) +
     scale_size_continuous(name = "number of genes",
                           range = c(3, 8) )
   
-  if(!is.null(midcol))p<-p+scale_fill_gradient2(low = locol,mid=midcol, high = hicol,name=col.var,
-                                                guide = guide_colorbar()) 
-  else p<-p+scale_fill_continuous(low = locol, high = hicol,name=col.var,
-                                  guide = guide_colorbar())
+  if('discrete'%in%cols){
+    p<-p+scale_fill_discrete(name=col.var ) 
+    
+  }else if(!is.null(midcol)){
+    p<-p+scale_fill_gradient2(low = locol,mid=midcol, high = hicol,name=col.var,
+                              guide = guide_colorbar()) 
+    
+  }else{
+    p<-p+scale_fill_continuous(low = locol, high = hicol,name=col.var,
+                               guide = guide_colorbar())
+
+  }
   
   p<-p+theme(legend.title = element_text(size = 10),
              legend.text  = element_text(size = 10)) +
     theme(panel.background = element_blank()) 
+  
   return(p)
 }
 add_node_label <- function(p,label.size=label.size,max.overlaps=10) {
@@ -126,6 +145,16 @@ emmaplot<-function(res_fgsea,
     res_fgsea[,NES:=fold.enrichment]
     
   }
+  
+  if(col.var!='NES'){
+    if(any(table(res_fgsea[,.SD,.SDcols=col.var])>1)){
+      
+      res_fgsea[,(col.var):=lapply(.SD,as.character),.SDcols=col.var]
+      
+      cols='discrete'
+    }
+  }
+  
   
   if(is.null(pathway_names))pathway_names=res_fgsea[order(pval)]$pathway
   
@@ -196,12 +225,9 @@ emmaplot<-function(res_fgsea,
 #Annexe functions####
 
 GetPathwaysLinks<-function(res_fgsea,
-                   pathway_names=NULL, 
-                   col.var="NES",
+                   pathway_names=NULL,
                    show_pathway_of=NULL,
-                   min_edge=0.2,
-                   label.size=2.5,
-                   max.overlaps=10){
+                   min_edge=0.2){
   require('ggrepel')
   
   if(is.null(pathway_names))pathway_names=res_fgsea[order(pval)]$pathway
@@ -227,11 +253,12 @@ GetPathwaysLinks<-function(res_fgsea,
                     pathway_names = pathway_names,
                     simmat = simat,
                     leading_edge_list = lelist,
-                    min_edge = min_edge,
-                    col.var = col.var
+                    min_edge = min_edge
     )
     pathways_links<-data.table(get.edgelist(g))
     setnames(pathways_links,new = c('pathway1','pathway2'))
+    pathways_links[,weight:=simat[pathway1,pathway2],by=c('pathway1','pathway2')]
+    
     return(pathways_links)
     
   }else{
@@ -239,4 +266,100 @@ GetPathwaysLinks<-function(res_fgsea,
     
   }
 }
+
+
+ClusterPathways<-function(x,resolution=1,method='louvain',min_edge=NULL,weights=NULL){
+  require(igraph)
+
   
+  if(!'weight'%in%colnames(x)){
+    if(is.null(min_edge)){
+      min_edge=0.2
+    }
+    x<-GetPathwaysLinks(x,min_edge = min_edge)
+    
+  }
+  
+  graph<-graph.data.frame(data.frame(x),directed = F)
+  
+  
+  if(method=='louvain'){
+    cl<-cluster_louvain(graph, weights = weights, resolution = resolution)
+    
+  }else{
+    stop('no other method than louvain implemented yet')
+  }
+
+  
+  return(data.table(pathway=cl$names,cluster=cl$membership))
+}
+
+
+GetRepresentativePathways<-function(res_fgsea,group.by=NULL,pathway_names=NULL,return_full=TRUE,padj.thr=0.05,resolution=1){
+  
+  res<-copy(res_fgsea)
+  if(max(res$padj)>padj.thr){
+    message('removing pathways not passing padj threshold ',padj.thr)
+    message(nrow(res[padj<padj.thr]),'/',nrow(res),' pathways conserved')
+    res<-res[padj<padj.thr]
+    
+  }
+  
+  if(!is.null(pathway_names))
+    res<-res[pathway%in%pathway_names]
+  
+  if(is.null(group.by)){
+    group.by='group'
+    res<-res[,(group.by):=1]
+  }
+  
+  if(length(group.by)>1){
+    res<-res[,group:=apply(.SD,1,function(x)paste(x,collapse = '_')),.SDcols=group.by]
+    group.by='group'
+  }
+  
+  res<-rbindlist(lapply(unlist(unique(res[,..group.by])), function(g){
+    message('finding representative pathways for ',g)
+    res1<-unique(res[g,on=group.by][order(padj)],by='pathway')
+    if(nrow(res1)>1){
+      pathways_links<-GetPathwaysLinks(res1)
+      
+      pathways_cluster<-ClusterPathways(pathways_links,
+                                        method='louvain',resolution = resolution,weights = NA)
+      
+      
+      pathway_stat<-data.table(pathway=union(pathways_links$pathway1,pathways_links$pathway2))
+      
+      pathway_stat[,n.link:=nrow(pathways_links[pathway1==pathway|pathway2==pathway]),by='pathway']
+      
+      pathways_links<-merge(pathways_links,copy(pathways_cluster)[,pathway1:=pathway][,cluster1:=cluster][,.(pathway1,cluster1)])
+      pathways_links<-merge(pathways_links,copy(pathways_cluster)[,pathway2:=pathway][,cluster2:=cluster][,.(pathway2,cluster2)],by='pathway2')
+      pathway_stat<-merge(pathway_stat,pathways_cluster)
+      pathway_stat[,n.link.in.cluster:=nrow(pathways_links[(pathway1==pathway&cluster2==cluster)|(pathway2==pathway&cluster1==cluster)]),by='pathway']
+      
+      res1<-merge(res1,pathway_stat,all.x = TRUE)
+      
+      res1[is.na(cluster),cluster:=0]
+      
+      #central one + the one with bigger NES, padj by cluster
+      res1[,top.central:=rank(n.link.in.cluster)==max(rank(n.link.in.cluster)),by='cluster']
+      res1[,top.NES:=rank(abs(NES))==max(rank(abs(NES))),by='cluster']
+      res1[,top.pval:=rank(pval)==min(rank(pval)),by='cluster']
+      
+      res1[,tops.cluster:=top.central|top.NES|top.pval,by='cluster']
+      return(res1)
+      
+    }else{
+      return(res1)
+    }
+    
+  }))
+  
+  if(return_full)
+    return(res)
+  else
+    return(res[(tops.cluster)])
+  
+}
+
+

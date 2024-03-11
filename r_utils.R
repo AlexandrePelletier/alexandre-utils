@@ -44,8 +44,32 @@ CategoricalsToDummy<-function(covs){
 
 
 
-#Reformatting classical R data/results ####
+GetVarPCs<-function(pca,rngPCs="all"){
+  if(is.character(rngPCs)){
+    rngPCs<-1:length(pca$sdev)
+  }
+  pct.varPCs<-pca$sdev[rngPCs]^2/sum(pca$sdev^2)
+  names(pct.varPCs)<-rngPCs
+  return( pct.varPCs)
+}
 
+
+#Reformatting classical R data/results ####
+UniqueClean<-function(x,key_cols='sample_id',pattern_to_exclude=NULL){
+  #keep only unconstant variables
+  nums_to_keep<-names(which(x[,sapply(.SD,function(y)(!all(is.na(y)))&var(y,na.rm = T)!=0)&length(unique(y))!=.N,.SDcols=is.numeric]))
+  
+  cats_to_keep<-names(which(x[,sapply(.SD,function(y)(!all(is.na(y)))&length(unique(y))!=.N&length(unique(y))!=1),.SDcols=!is.numeric]))
+  
+  if(!is.null(pattern_to_exclude)){
+    nums_to_keep<-nums_to_keep[!str_detect(nums_to_keep,pattern_to_exclude)]
+    cats_to_keep<-cats_to_keep[!str_detect(cats_to_keep,pattern_to_exclude)]
+    
+  }
+  cols_to_keep<-c(key_cols,nums_to_keep,cats_to_keep)
+  
+  return(unique(x,by=c(key_cols))[,.SD,.SDcols=cols_to_keep])
+}
 
 RemoveUselessColumns<-function(x,key_cols='sample_id',pattern_to_exclude=NULL){
   #keep only unconstant variables
@@ -128,6 +152,15 @@ TransNMtoSymbol<-function(refseq_ids){
                                       filters = 'refseq_mrna', 
                                       values = refseq_ids, 
                                       mart = GetMartGenes())))
+}
+
+TransTranscriptToGene<-function(transcript_ids){
+  require(biomaRt)
+  require(data.table)
+  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id', 'ensembl_transcript_id'),
+                                               filters = 'ensembl_transcript_id', 
+                                               values = transcript_ids, 
+                                               mart = GetMartGenes())))
 }
 
 TransSymboltoNM<-function(hgnc_symbols){
@@ -245,14 +278,6 @@ tr<-function(ids_sepBySlash,retourne="all",sep="/",tradEntrezInSymbol=FALSE,uniq
 }
 
 
-GetVarPCs<-function(pca,rngPCs="all"){
-  if(is.character(rngPCs)){
-    rngPCs<-1:length(pca$sdev)
-  }
-  pct.varPCs<-pca$sdev[rngPCs]^2/sum(pca$sdev^2)
-  names(pct.varPCs)<-rngPCs
-  return( pct.varPCs)
-}
 
 
 
@@ -614,11 +639,13 @@ freadvcf<-function(file){
 CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
                         loadBashrc=FALSE,conda_env=NULL,
                         micromamba_env=NULL,
-                        nThreads=NULL,memPerCore=NULL,maxHours=24){
+                        nThreads=NULL,memPerCore=NULL,maxHours=24,
+                        parallelize=FALSE){
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
   filename<-basename(file)
   projdir<-dirname(file)
+  
   while(str_detect(projdir,'scripts')){
     projdir<-dirname(projdir)
   }
@@ -627,18 +654,84 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   file_path<-file
   log_file=file.path(projdir,'logs',paste0(str_remove(filename,'.qsub$'),'.log'))
   
+  #create the qsub file
   cat('#!/bin/bash -l\n',file = file_path)
+  message('qsub file created at ',file_path)
   
-  #add the job parameters
-  proj_name<-paste('-P ',proj_name)
-  CombStdOutErr<-'-j y'
-  maxHours<-paste0('-l h_rt=',maxHours,':00:00')
+  #set the general job parameters
+  proj_name_opt<-paste('-P ',proj_name)
+  CombStdOutErr_opt<-'-j y'
+  maxHours_opt<-paste0('-l h_rt=',maxHours,':00:00')
   qlog<-paste('-o ',log_file)
-  if(!is.null(nThreads))nThreads=paste('-pe omp',nThreads)
-  if(!is.null(memPerCore))memPerCore=paste0('-l mem_per_core=',memPerCore)
+  if(!is.null(nThreads)){
+    nThreads_opt=paste('-pe omp',nThreads)
+  }else{
+    nThreads_opt=NULL
+    
+  }
   
+  if(!is.null(memPerCore)){
+    memPerCore_opt=paste0('-l mem_per_core=',memPerCore)
+  }else{
+    memPerCore_opt=NULL
+    
+    }
+  #create child qsub files if parallelize mode
+  
+  if(parallelize&length(cmd_list)>1){
+    
+    script_id=str_extract(filename,'^[0-9A-Za-z]+')
+    scripts_dir<-file.path(projdir,'scripts')
+   if(!dir.exists(scripts_dir))dir.create(scripts_dir)
+    
+    #add the main job parameters
+    cat( '#Parameters of the Jobs :',file = file_path,append = T)
+    cat( c('\n',proj_name_opt,CombStdOutErr_opt,maxHours_opt,qlog),
+         file = file_path,append = T,sep = '\n#$')
+    cat( '\n',file = file_path,append = T,sep = '\n')
+    
+    
+      if(!is.null(names(cmd_list))){
+        child_jobnames<-make.names(names(cmd_list))
+      }else{
+        child_jobnames<-paste0('child',1:length(cmd_list))
+      }
+    
+    child_jobfiles<-file.path(scripts_dir,paste0(script_id,'child-',child_jobnames,'.qsub'))
+   
+     #add command to run the childs qsub
+    cmds<-sapply(1:length(cmd_list),function(i){
+      
+      cmd<-cmd_list[[i]]
+      CreateJobFile(cmd_list =cmd,file = child_jobfiles[[i]],nThreads = nThreads ,proj_name = proj_name ,
+                    loadBashrc = loadBashrc,modules = modules,conda_env = conda_env,micromamba_env = micromamba_env,
+                    maxHours =  maxHours,memPerCore = memPerCore,parallelize = FALSE)
+      
+      # Submit the job using qsub and capture the job ID
+      cmd<-paste(paste0('job_id',i),'=$(qsub', '-N',paste0('j',script_id,child_jobnames[[i]]),child_jobfiles[[i]],proj_name)
+      # cmd<-RunQsub(child_jobfiles[[i]],job_name = paste0('j',script_id,child_jobnames[[i]]),dryrun = T)
+      return(cmd)
+      
+    })
+    
+    cat( cmds,file = file_path,append = T,sep = '\n')
+    
+    # Wait until the jobs are completed
+    for(i in 1:length(cmd_list)){
+      cmd_wait<-c(paste('while qstat | grep -w',paste0("$job_id",i),  '> /dev/null; do'),
+                  paste('echo', '"waiting jobs to complete.."'),
+                  paste('sleep', '30'), # Adjust sleep time as needed
+                  'done',
+                  paste('echo',paste0('"Job',i),'have completed."'))
+      cat( cmd_wait,file = file_path,append = T,sep = '\n')
+      
+    }
+   
+    
+  }else{
+    #add the core job parameters
   cat( '#Parameters of the Jobs :',file = file_path,append = T)
-  cat( c('\n',proj_name,CombStdOutErr,maxHours,qlog,nThreads),file = file_path,append = T,sep = '\n#$')
+  cat( c('\n',proj_name_opt,CombStdOutErr_opt,maxHours_opt,qlog,nThreads_opt,memPerCore_opt),file = file_path,append = T,sep = '\n#$')
   cat( '\n',file = file_path,append = T,sep = '\n')
   
   #add the module to loads
@@ -683,7 +776,8 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
     if('pisces-rabbit'%in%micromamba_env){
       cat( c('\n# singularity specifics configuration: ',
              'export SINGULARITY_BIND="$TMP,/restricted/projectnb/tcwlab-adsp/,/projectnb/tcwlab-adsp/,/projectnb/tcwlab/"',
-             'touch .Rprofile'),file = file_path,append = T,sep = '\n')
+             'touch .Rprofile'),
+           file = file_path,append = T,sep = '\n')
 
     }
     cat( '\n',file = file_path,append = T,sep = '\n')
@@ -691,10 +785,8 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   }
   
   
-  
   #add the header
   system(paste('cat',template_header,'>>',file_path))
-  
   
   #add the commandes to exec
 
@@ -718,15 +810,13 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   system(paste('cat',template_tail,'>>',file_path))
   
   #show the file header
-  message('qsub file created at ',file_path)
   message('header:')
   system(paste('head -n 15',file_path))
+  }
   
   #show the first commands
   message('5 first commands:')
   cat( head(cmds,5),sep = '\n')
-  
-  
   
 }
 
@@ -805,8 +895,7 @@ CreateJobForPyFile<-function(python_file,proj_name='tcwlab',modules=NULL,
     
   }
   
-  
-  
+
   #add the header
   system(paste('cat',template_header,'>>',qsub_file))
   
@@ -832,7 +921,6 @@ CreateJobForPyFile<-function(python_file,proj_name='tcwlab',modules=NULL,
   #show the first R lines
   message('the 15 firsts lines of Python scripts to execute:')
   system(paste('head -n 15',python_file))
-  
   
   
   
@@ -934,7 +1022,7 @@ CreateJobForRfile<-function(r_file,proj_name='tcwlab',
   
 }
 
-RunQsub<-function(qsub_file,job_name,proj_name=NULL,wait_for=NULL){
+RunQsub<-function(qsub_file,job_name,proj_name=NULL,wait_for=NULL,dryrun=FALSE){
   if(!str_detect(qsub_file,'.qsub$'))qsub_file=paste0(tools::file_path_sans_ext(qsub_file),'.qsub')
   
   if(!file.exists(qsub_file))stop(qsub_file,' do not exist')
@@ -948,19 +1036,24 @@ RunQsub<-function(qsub_file,job_name,proj_name=NULL,wait_for=NULL){
                '-hold_jid',wait_for,
                qsub_file,proj_name)
   }
-  message<-system(cmd,intern = TRUE)
-  message(paste(message,collapse = '\n'))
-  
-  jobid<-ifelse(str_detect(message,'has been submitted'),str_extract(message,'[0-9]+'),NA)
-  return(jobid[!is.na(jobid)])
+  if(!dryrun){
+    message<-system(cmd,intern = TRUE)
+    message(paste(message,collapse = '\n'))
+    
+    jobid<-ifelse(str_detect(message,'has been submitted'),str_extract(message,'[0-9]+'),NA)
+    return(jobid[!is.na(jobid)])
+  }else{
+    return(cmd)
+  }
+
 }
 
 
 
 WaitQsub<-function(qsub_file,jobid,max_hours=24){
-  if(!str_detect(qsub_file,'.qsub$'))qsub_file=paste0(tools::file_path_sans_ext(qsub_file),'.qsub')
+  if(!str_detect(qsub_file,'\\.qsub$'))qsub_file=paste0(tools::file_path_sans_ext(qsub_file),'.qsub')
   
-  if(!file.exists(qsub_file))stop(qsub_file,' do not exist')
+  if(!file.exists(qsub_file))stop(qsub_file,' file does not exist')
   
   filename<-basename(qsub_file)
   projdir<-dirname(qsub_file)
@@ -979,17 +1072,25 @@ WaitQsub<-function(qsub_file,jobid,max_hours=24){
     t1 <- Sys.time()
     d<-t1-t0
     if(d>max_sec)stop('time reached max limits')
+    message('waiting job ',jobid,' to be executed..')
+    
     
   }
   
   jobid_inlog=str_extract(tail(grep('job ID :',
-                              readLines(con = log_file,skipNul = TRUE),
-                              value = T),n = 1),'[0-9]+$')
+                                    readLines(con = log_file,skipNul = TRUE),
+                                    value = T),n = 1),'[0-9]+$')
+
   while(jobid!=jobid_inlog){
+    message('waiting job ',jobid,' to be executed..')
     Sys.sleep(60)
     t1 <- Sys.time()
     d<-t1-t0
     if(d>max_sec)stop('time reached max limits')
+    jobid_inlog=str_extract(tail(grep('job ID :',
+                                      readLines(con = log_file,skipNul = TRUE),
+                                      value = T),n = 1),'[0-9]+$')
+    
     
   }
   
@@ -997,13 +1098,16 @@ WaitQsub<-function(qsub_file,jobid,max_hours=24){
   lastlines<-tail(readLines(con = log_file,skipNul = TRUE))
   
   while(!any(str_detect(lastlines,pattern)) ){
+    message('waiting job ',jobid,' to be completed..')
     Sys.sleep(120)
     lastlines<-tail(readLines(con = log_file,skipNul = TRUE))
     t1 <- Sys.time()
     d<-t1-t0
     if(d>max_sec)stop('time reached max limits')
   }
-  message(pattern,' after', round(d/360,2),' hours')
+  t1 <- Sys.time()
+  d<-t1-t0
+  message(pattern,' after ', round(d/360,2),' hours')
   
   
 }
