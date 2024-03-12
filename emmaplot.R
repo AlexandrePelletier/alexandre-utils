@@ -3,6 +3,9 @@
 
 require(igraph)
 require(ggraph)
+require(stringr)
+require(ggplot2)
+require(data.table)
 
 #Useful Functions####
 #get sim matrix
@@ -139,11 +142,20 @@ emmaplot<-function(res_fgsea,
                    cols=c('blue','white','red'),
                    max.overlaps=10){
   require('ggrepel')
+  if(!'data.table'%in%class(res_fgsea)){
+    res_fgsea<-data.table(res_fgsea)
+  }
+  
+
   
   if(all(c('term','n.overlap')%in%colnames(res_fgsea))){
     res_fgsea[,pathway:=term]
     res_fgsea[,NES:=fold.enrichment]
     
+  }
+  
+  if(!'pathway'%in%colnames(res_fgsea)){
+    stop('expected format: fgsea results or overrepresentation results (OR3) format')
   }
   
   if(col.var!='NES'){

@@ -641,6 +641,7 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
                         micromamba_env=NULL,
                         nThreads=NULL,memPerCore=NULL,maxHours=24,
                         parallelize=FALSE){
+  
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
   filename<-basename(file)
@@ -723,7 +724,7 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
                   paste('sleep', '30'), # Adjust sleep time as needed
                   'done',
                   paste('echo',paste0('"Job',i),'have completed."'))
-      cat( cmd_wait,file = file_path,append = T,sep = '\n')
+      cat( c('\n',cmd_wait,file = file_path,append = T,sep = '\n'))
       
     }
    
