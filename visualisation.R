@@ -2,6 +2,10 @@
 #required package
 require(pheatmap)
 require(stringr)
+require(ggplot2)
+require(data.table)
+
+source<-function(file,chdir=TRUE)base::source(file,chdir = chdir)
 
 #DIFFERENTIAL EXPRESSION RESULTS####
 #HEATMAPS comparing DEGs 
@@ -43,6 +47,7 @@ CompDEGs<-function(res_des,
   col_breaks<-c(((col_range[1]*10):(col_range[2]*10))/10)
 
   if(!is.null(save.pdf)){
+    
     pdf(save.pdf,width =width,height = height)
     print(pheatmap(mat_de,
                    breaks =col_breaks,

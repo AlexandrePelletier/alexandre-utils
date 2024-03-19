@@ -247,6 +247,17 @@ TransNMtoEnsemblVers<-function(refseq_ids){
 }
 
 
+TransTranscriptToGene<-function(transcript_ids){
+  require(biomaRt)
+  require(data.table)
+  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id',
+                                                              'ensembl_transcript_id'),
+                                               filters = 'ensembl_transcript_id', 
+                                               values = transcript_ids, 
+                                               mart = GetMartGenes())))
+}
+
+
 
 tr<-function(ids_sepBySlash,retourne="all",sep="/",tradEntrezInSymbol=FALSE,uniqu=TRUE){
   IDs<-as.vector(strsplit(ids_sepBySlash,sep)[[1]])
@@ -317,8 +328,8 @@ convertMouseGeneList <- function(x,return_dt=T){
 }
 
 
-#Over repre / GSEA####
 
+#Over repre / GSEA####
 
 OR<-function(set1,set2,size_universe){
   if(any(duplicated(set1))){
@@ -635,10 +646,13 @@ freadvcf<-function(file){
 }
 
 
-#GSUB FILES CREATION####
+#QSUB FILES CREATION####
+
+
 CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
                         loadBashrc=FALSE,conda_env=NULL,
                         micromamba_env=NULL,
+                        cwd='.',
                         nThreads=NULL,memPerCore=NULL,maxHours=24,
                         parallelize=FALSE){
   
@@ -678,18 +692,20 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
     
     }
   #create child qsub files if parallelize mode
-  
   if(parallelize&length(cmd_list)>1){
     
     script_id=str_extract(filename,'^[0-9A-Za-z]+')
     scripts_dir<-file.path(projdir,'scripts')
    if(!dir.exists(scripts_dir))dir.create(scripts_dir)
-    
+  
     #add the main job parameters
     cat( '#Parameters of the Jobs :',file = file_path,append = T)
     cat( c('\n',proj_name_opt,CombStdOutErr_opt,maxHours_opt,qlog),
          file = file_path,append = T,sep = '\n#$')
     cat( '\n',file = file_path,append = T,sep = '\n')
+    
+    #add the header
+    system(paste('cat',template_header,'>>',file_path))
     
     
       if(!is.null(names(cmd_list))){
@@ -709,7 +725,7 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
                     maxHours =  maxHours,memPerCore = memPerCore,parallelize = FALSE)
       
       # Submit the job using qsub and capture the job ID
-      cmd<-paste(paste0('job_id',i),'=$(qsub', '-N',paste0('j',script_id,child_jobnames[[i]]),child_jobfiles[[i]],proj_name)
+      cmd<-paste(paste0('job_id',i,'=$(qsub'), '-N',paste0('j',script_id,child_jobnames[[i]]),child_jobfiles[[i]],proj_name,' | grep -Ewo [0-9]+)')
       # cmd<-RunQsub(child_jobfiles[[i]],job_name = paste0('j',script_id,child_jobnames[[i]]),dryrun = T)
       return(cmd)
       
@@ -719,14 +735,18 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
     
     # Wait until the jobs are completed
     for(i in 1:length(cmd_list)){
-      cmd_wait<-c(paste('while qstat | grep -w',paste0("$job_id",i),  '> /dev/null; do'),
+      cmd_wait<-c(paste('while qstat | grep -w',paste0('"',paste0('$job_id',i),'"'),  '> /dev/null; do'),
                   paste('echo', '"waiting jobs to complete.."'),
                   paste('sleep', '30'), # Adjust sleep time as needed
                   'done',
                   paste('echo',paste0('"Job',i),'have completed."'))
-      cat( c('\n',cmd_wait,file = file_path,append = T,sep = '\n'))
+      cat( c('\n',cmd_wait),file = file_path,append = T,sep = '\n')
       
     }
+    
+    #add the tail
+    system(paste('cat',template_tail,'>>',file_path))
+    
    
     
   }else{
@@ -773,7 +793,11 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   #activate micromamba environment 
   if(!is.null(micromamba_env)){
     cat( '#Micromamba environment activation:',file = file_path,append = T)
+    
+    micromamba_env<-ifelse(micromamba_env=='fungen','pisces-rabbit',micromamba_env)
+    
     cat( c('\n',micromamba_env),file = file_path,append = T,sep = '\nmicromamba activate ')
+    
     if('pisces-rabbit'%in%micromamba_env){
       cat( c('\n# singularity specifics configuration: ',
              'export SINGULARITY_BIND="$TMP,/restricted/projectnb/tcwlab-adsp/,/projectnb/tcwlab-adsp/,/projectnb/tcwlab/"',
@@ -788,6 +812,14 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   
   #add the header
   system(paste('cat',template_header,'>>',file_path))
+  
+  #go to cwd
+  if(cwd!='.'){
+    cat( paste('cd',cwd),file = file_path,append = T,sep = '\n')
+    
+    cat( '\n',file = file_path,append = T,sep = '\n')
+    
+  }
   
   #add the commandes to exec
 
