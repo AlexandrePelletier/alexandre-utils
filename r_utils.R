@@ -654,7 +654,7 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
                         micromamba_env=NULL,
                         cwd='.',
                         nThreads=NULL,memPerCore=NULL,maxHours=24,
-                        parallelize=FALSE){
+                        parallelize=FALSE,maxChildJobs=60){
   
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
@@ -717,6 +717,9 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
     child_jobfiles<-file.path(scripts_dir,paste0(script_id,'child-',child_jobnames,'.qsub'))
    
      #add command to run the childs qsub
+    n_jobs<-ifelse(length(cmd_list)<maxChildJobs,length(cmd_list),maxChildJobs)
+    cmd_list<-split(unlist(cmd_list),1:n_jobs)
+    
     cmds<-sapply(1:length(cmd_list),function(i){
       
       cmd<-cmd_list[[i]]
@@ -815,6 +818,7 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   
   #go to cwd
   if(cwd!='.'){
+    cat( paste('mkdir',cwd),file = file_path,append = T,sep = '\n')
     cat( paste('cd',cwd),file = file_path,append = T,sep = '\n')
     
     cat( '\n',file = file_path,append = T,sep = '\n')
@@ -833,6 +837,16 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   
   cat( cmds,file = file_path,append = T,sep = '\n')
   
+  
+  #go back to cwd
+  if(cwd!='.'){
+    cwd<-getwd()
+    cat( paste('cd',cwd),file = file_path,append = T,sep = '\n')
+    
+    cat( '\n',file = file_path,append = T,sep = '\n')
+    
+  }
+  
   if('pisces-rabbit'%in%micromamba_env){
     cat( c('\n# Singularity specifics clean up: ',
            'rm .Rprofile'),file = file_path,append = T,sep = '\n')
@@ -842,6 +856,7 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   #add the tail
   system(paste('cat',template_tail,'>>',file_path))
   
+ 
   #show the file header
   message('header:')
   system(paste('head -n 15',file_path))

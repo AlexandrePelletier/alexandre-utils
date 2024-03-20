@@ -37,7 +37,8 @@ BamDownSample<-function(bams,out_dir=NULL,prop=0.01){
 #transform to BED regions the bam
 #usage: bedtools bamtobed -i file.bam > file.bed'
 ConvertBamToBed<-function(bams,out_dir=NULL,job_file=NULL,
-                          nThreads=NULL,parallelize=FALSE){
+                          nThreads=NULL,parallelize=FALSE,
+                          maxChildJobs=40,wait_job=TRUE,){
   
   bam_dir=unique(dirname(bams))
   if(is.null(out_dir)){
@@ -50,9 +51,14 @@ ConvertBamToBed<-function(bams,out_dir=NULL,job_file=NULL,
     dir.create(out_dir)
   }
   
-
-  cmds<-lapply(bams, function(bam_file){
-    paste('bedtools bamtobed -i',bam_file,'|gzip -c >',fp(out_dir,str_replace(basename(bam_file),'.bam$','.bed.gz')))
+  bed_files<-fp(out_dir,str_replace(basename(bams),'.bam$','.bed.gz'))
+  
+  
+  cmds<-lapply(1:length(bams), function(i){
+    bam_file<-bams[i]
+    bed_file<-bed_files[i]
+    
+    paste('bedtools bamtobed -i',bam_file,'|gzip -c >',bed_file)
   })
   
   if(is.null(job_file)){
@@ -66,14 +72,14 @@ ConvertBamToBed<-function(bams,out_dir=NULL,job_file=NULL,
     }
     
   }else{
-  CreateJobFile(cmds,file = job_file,
-                loadBashrc = T,modules = c('bedtools'),nThreads = nThreads,parallelize =parallelize )
-  
-  jobid<-RunQsub(job_file,job_name = 'bamtobed')
-  WaitQsub(job_file,jobid =jobid )
+    CreateJobFile(cmds,file = job_file,
+                  loadBashrc = T,modules = c('bedtools'),
+                  nThreads = nThreads,parallelize =parallelize,maxChildJobs=maxChildJobs )
+    
+    jobid<-RunQsub(job_file,job_name = 'bamtobed')
+    if(wait_job)WaitQsub(job_file,jobid =jobid )
   }
   
-  bed_files<-fp(out_dir,str_replace(basename(bams),'.bam$','.bed.gz'))
   
   return(bed_files)
 }
@@ -90,7 +96,8 @@ ConvertBamToBed<-function(bams,out_dir=NULL,job_file=NULL,
 
 CountBEDOverlap<-function(bed_files,genomic_regions_file,
                           out_dir=NULL,job_file=NULL,
-                          nThreads=NULL,parallelize=F){
+                          nThreads=NULL,parallelize=F,
+                          maxChildJobs=40,wait_job=TRUE){
   bed_dir=unique(dirname(bed_files))
   if(is.null(out_dir)){
     out_dir=bed_dir
@@ -113,32 +120,32 @@ CountBEDOverlap<-function(bed_files,genomic_regions_file,
   if(is.null(job_file)){
     
     #job_file<-fp('scripts',ps('counts_overlap_',tools::file_path_sans_ext(bed_files[1],'_andCo_with_',tools::file_path_sans_ext(basename(genomic_regions_file)),'.qsub')))
-
-     for(cmd in cmds){
-       message('running ',cmd)
-       
-       system(cmd)
-       
-       
-     }
     
-    }else{
+    for(cmd in cmds){
+      message('running ',cmd)
       
+      system(cmd)
+      
+      
+    }
+    
+  }else{
+    
     CreateJobFile(cmds,file = job_file,
-                  loadBashrc = T,modules = c('bedtools'),nThreads = nThreads,parallelize =parallelize )
+                  loadBashrc = T,modules = c('bedtools'),
+                  nThreads = nThreads,parallelize =parallelize,
+                  maxChildJobs=maxChildJobs)
     
     jobid<-RunQsub(job_file,job_name = 'countbedoverlap')
     
-    WaitQsub(job_file,jobid =jobid )
-    }
+    if(wait_job)WaitQsub(job_file,jobid =jobid )
+  }
   
   count_files<- fp(out_dir,ps(tools::file_path_sans_ext(basename(bed_files)),'.',tools::file_path_sans_ext(basename(genomic_regions_file)),
                               '.overlap.count.bed.gz'))
   
   return(count_files)
   
-
-
 }
 
 #Example:
@@ -155,7 +162,7 @@ SplicingDeficiency<-function(introns_count,exons_count,out_dir){
   # Sd = (# of intronic reads/total intronic length)
   # ÷ (# of exonic reads/total exonic length)
   
- 
+  
   counts<-rbind(fread(introns_count,select = c(1:5),col.names = c('chr','start','end','ID','count'))[,type:='intron'],
                 fread(exons_count,select = c(1:5),col.names = c('chr','start','end','ID','count'))[,type:='exon'])
   counts[,length:=end-start]
