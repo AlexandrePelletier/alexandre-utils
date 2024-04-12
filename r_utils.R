@@ -145,64 +145,64 @@ GetBiomartFilter<-function()data.table::data.table(biomaRt::listFilter(mart))
 GetBiomartAttrs_reg<-function()data.table::data.table(listAttributes(biomaRt::useEnsembl(biomart = "regulation",dataset = "hsapiens_regulatory_feature")))
 GetBiomartFilter_reg<-function()data.table::data.table(biomaRt::listFilter(biomaRt::useEnsembl(biomart = "regulation", dataset = "hsapiens_regulatory_feature")))
 
-TransNMtoSymbol<-function(refseq_ids){
+TransNMtoSymbol<-function(refseq_ids,add.attributes=NULL){
   require(biomaRt)
   require(data.table)
-  return(data.table::data.table(getBM(attributes = c('refseq_mrna', 'hgnc_symbol'),
+  return(data.table::data.table(getBM(attributes = c('refseq_mrna', 'hgnc_symbol',add.attributes),
                                       filters = 'refseq_mrna', 
                                       values = refseq_ids, 
                                       mart = GetMartGenes())))
 }
 
-TransTranscriptToGene<-function(transcript_ids){
+TransTranscriptToGene<-function(transcript_ids,add.attributes=NULL){
   require(biomaRt)
   require(data.table)
-  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id', 'ensembl_transcript_id'),
+  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id', 'ensembl_transcript_id',add.attributes),
                                                filters = 'ensembl_transcript_id', 
                                                values = transcript_ids, 
                                                mart = GetMartGenes())))
 }
 
-TransSymboltoNM<-function(hgnc_symbols){
+TransSymboltoNM<-function(hgnc_symbols,add.attributes=NULL){
   require(biomaRt)
   require(data.table)
-  return(data.table::data.table(biomaRt::getBM(attributes = c('refseq_mrna', 'hgnc_symbol'),
+  return(data.table::data.table(biomaRt::getBM(attributes = c('refseq_mrna', 'hgnc_symbol',add.attributes),
                                                filters = 'hgnc_symbol', 
                                                values = hgnc_symbols, 
                                                mart = GetMartGenes())))
 }
 
-TransEnsembltoSymbol<-function(ensembl_ids){
+TransEnsembltoSymbol<-function(ensembl_ids,add.attributes=NULL){
   require(biomaRt)
   require(data.table)
-  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id', 'hgnc_symbol'),
+  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id', 'hgnc_symbol',add.attributes),
                                                filters = 'ensembl_gene_id', 
                                                values = ensembl_ids, 
                                                mart = GetMartGenes())))
 }
 
-TransSymboltoEnsembl<-function(hgnc_symbols){
+TransSymboltoEnsembl<-function(hgnc_symbols,add.attributes=NULL){
   require(biomaRt)
   require(data.table)
-  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id', 'hgnc_symbol'),
+  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id', 'hgnc_symbol',add.attributes),
                                                filters = 'hgnc_symbol', 
                                                values = hgnc_symbols, 
                                                mart = GetMartGenes())))
 }
 
-TransEnsemblVerstoSymbol<-function(ensembl_ids){
+TransEnsemblVerstoSymbol<-function(ensembl_ids,add.attributes=NULL){
   require(biomaRt)
   require(data.table)
-  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id_version', 'hgnc_symbol'),
+  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id_version', 'hgnc_symbol',add.attributes),
                                                filters = 'ensembl_gene_id_version', 
                                                values = ensembl_ids, 
                                                mart = GetMartGenes())))
 }
 
-TransSymboltoEnsemblVers<-function(hgnc_symbols){
+TransSymboltoEnsemblVers<-function(hgnc_symbols,add.attributes=NULL){
   require(biomaRt)
   require(data.table)
-  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id_version', 'hgnc_symbol'),
+  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id_version', 'hgnc_symbol',add.attributes),
                                                filters = 'hgnc_symbol', 
                                                values = hgnc_symbols, 
                                                mart = GetMartGenes())))
@@ -210,48 +210,48 @@ TransSymboltoEnsemblVers<-function(hgnc_symbols){
 
 
 
-TransEnsembltoNM<-function(ensembl_ids){
+TransEnsembltoNM<-function(ensembl_ids,add.attributes=NULL){
   require(biomaRt)
   require(data.table)
-  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id', 'refseq_mrna'),
+  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id', 'refseq_mrna',add.attributes),
                                                filters = 'ensembl_gene_id', 
                                                values = ensembl_ids, 
                                                mart = GetMartGenes())))
 }
 
-TransNMtoEnsembl<-function(refseq_ids){
+TransNMtoEnsembl<-function(refseq_ids,add.attributes=NULL){
   require(biomaRt)
   require(data.table)
-  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id', 'refseq_mrna'),
+  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id', 'refseq_mrna',add.attributes),
                                                filters = 'refseq_mrna', 
                                                values = refseq_ids, 
                                                mart = GetMartGenes())))
 }
 
-TransEnsemblVerstoNM<-function(ensembl_ids){
+TransEnsemblVerstoNM<-function(ensembl_ids,add.attributes=NULL){
   require(biomaRt)
   require(data.table)
-  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id_version', 'refseq_mrna'),
+  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id_version', 'refseq_mrna',add.attributes),
                                                filters = 'ensembl_gene_id_version', 
                                                values = ensembl_ids, 
                                                mart = GetMartGenes())))
 }
 
-TransNMtoEnsemblVers<-function(refseq_ids){
+TransNMtoEnsemblVers<-function(refseq_ids,add.attributes=NULL){
   require(biomaRt)
   require(data.table)
-  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id_version', 'refseq_mrna'),
+  return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id_version', 'refseq_mrna',add.attributes),
                                                filters = 'refseq_mrna', 
                                                values = refseq_ids, 
                                                mart = GetMartGenes())))
 }
 
 
-TransTranscriptToGene<-function(transcript_ids){
+TransTranscriptToGene<-function(transcript_ids,add.attributes=NULL){
   require(biomaRt)
   require(data.table)
   return(data.table::data.table(biomaRt::getBM(attributes = c('ensembl_gene_id',
-                                                              'ensembl_transcript_id'),
+                                                              'ensembl_transcript_id',add.attributes),
                                                filters = 'ensembl_transcript_id', 
                                                values = transcript_ids, 
                                                mart = GetMartGenes())))
@@ -487,79 +487,8 @@ FindGO_ID<-function(term_descriptions){
 
 
 
-####Signac####
-GetMotifIDs<-function(object,motif.names,assay=NULL,return_dt=FALSE){
-  if(is.null(assay))assay<-DefaultAssay(object)
-  idx<-match(motif.names,object@assays[[assay]]@motifs@motif.names)
-  if(return_dt){
-    return(
-      data.table(motif.name=motif.names,
-                 motif.id=names(object@assays[[assay]]@motifs@motif.names[idx]))
-    )
-  }else{
-    return(names(object@assays[[assay]]@motifs@motif.names[idx]))
-  }
-  
-}
 
-CheckMotif<-function(object,peaks,motif.name,assay = NULL,return.peaks=FALSE){
-  require("Signac")
-  if(is.null(assay))assay<-DefaultAssay(object)
-  motif<-GetMotifIDs(object,motif.name,assay=assay)
-  motif.all <- GetMotifData(
-    object = object, assay = assay, slot = "data"
-  )
-  
-  motifs_peaks_tf <- motif.all[peaks,motif , drop = FALSE]
-  if(return.peaks){
-    motifs_peaks_tf<-rownames(motifs_peaks_tf)[as.vector(motifs_peaks_tf==1)]
-    return(motifs_peaks_tf)
-  }else{
-    motifs_peaks_tf_vec<-as.vector(motifs_peaks_tf==1)
-    names(motifs_peaks_tf_vec)<-rownames(motifs_peaks_tf)
-    return(motifs_peaks_tf_vec)
-  }
-  
-  
-}
-GetMotifIDs<-function(object,motif.names,assay=NULL,return_dt=FALSE){
-  if(is.null(assay))assay<-DefaultAssay(object)
-  idx<-match(motif.names,object@assays[[assay]]@motifs@motif.names)
-  if(return_dt){
-    return(
-      data.table(motif.name=motif.names,
-                 motif.id=names(object@assays[[assay]]@motifs@motif.names[idx]))
-    )
-  }else{
-    return(names(object@assays[[assay]]@motifs@motif.names[idx]))
-  }
-  
-}
-GetMotif<-function(object,peaks,motifs=NULL,assay = "peaks"){
-  #return tfmotif peak data.table
-  require("Signac")
-  require("data.table")
-  
-  if(is.null(assay))assay<-DefaultAssay(object)
-  motif.all <- GetMotifData(
-    object = object, assay = assay, slot = "data"
-  )
-  if(is.null(motifs)) motifs<-colnames(motif.all)
-  motif.filtered<-motif.all[peaks,motifs,drop=F]
-  motif_dt<-melt(data.table(as.matrix(motif.filtered),keep.rownames = "peak"),
-                 variable.name="motif",value.name = "presence")
-  motif_dt[,presence:=as.logical(presence)]
-  motif_dt[(presence)] 
-  motif_dt<-motif_dt[(presence)][,-"presence"]
-  
-  motifsnames<-data.table(motif.name=object@assays$peaks@motifs@motif.names,motif=names(object@assays$peaks@motifs@motif.names))
-  motif_dt<-merge(motif_dt,motifsnames)
-  return(motif_dt)
-}
-
-
-
-
+#genomics coordinates manipulation ####
 start<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-")[[1]][2]))
 end<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-")[[1]][3]))
 seqid<-function(x)sapply(x,function(x)strsplit(x,"-")[[1]][1])
@@ -573,6 +502,7 @@ MethChangeReg<-function(res_meth,region){
   res_meth_reg[,start:=pos][,end:=pos+1]
   return(res_meth_reg)
 }
+
 MethChangePlot<-function(res_meth,region,limits=NULL,breaks=waiver()){
   start.pos <- start(region)
   end.pos <- end(region)
@@ -590,54 +520,6 @@ MethChangePlot<-function(res_meth,region,limits=NULL,breaks=waiver()){
   return(p)
 }
 
-TFMotifPlot<-function(object,region,motif.name,assay=NULL){
-  if(is.null(assay))assay<-DefaultAssay(object)
-  start.pos <- start(region)
-  end.pos <- end(region)
-  chromosome <- seqid(region)
-  ranges<-object@assays[[assay]]@motifs@positions[[GetMotifIDs(object,motif.names = motif.name)]]
-  dt <- data.table(as.data.frame(ranges))
-  dt_reg<-dt[seqnames==chromosome&start>start.pos&end<end.pos]
-  
-  p<-ggplot(data = dt_reg) + geom_segment(aes(x = start, y = 0, 
-                                              xend = end, yend = 0),col="black", size = 2, data = dt_reg)
-  
-  p<-p+ theme_classic() + ylab(label = motif.name) + 
-    theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) + 
-    xlab(label = paste0(chromosome, " position (bp)")) + 
-    xlim(c(start.pos, end.pos))
-  return(p)
-}
-
-TFsMotifPlot<-function(object,region,motif.names,assay=NULL,size=2,alpha=1,pad=0){
-  if(is.null(assay))assay<-DefaultAssay(object)
-  start.pos <- start(region)
-  end.pos <- end(region)
-  chromosome <- seqid(region)
-  
-  dt_region <-Reduce(rbind,lapply(motif.names,function(x){
-    
-    ranges<-object@assays[[assay]]@motifs@positions[GetMotifIDs(object,motif.names = x)]
-    
-    dt<-data.table(as.data.frame(ranges))[seqnames==chromosome&start>start.pos&end<end.pos][,motif.name:=x]
-    return(dt)
-  }
-  ))
-  
-  
-  p<-ggplot(data = dt_region) + geom_segment(aes(x = start-pad, y = 0, 
-                                                 xend = end+pad, yend = 0,col=motif.name), size = size,alpha=alpha, data = dt_region)
-  
-  p<-p+ theme_classic() + ylab(label = "TF motif") + 
-    theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) + 
-    xlab(label = paste0(chromosome, " position (bp)")) + 
-    xlim(c(start.pos, end.pos))
-  return(p)
-}
-
-
-
-str_to_vec<-function(ids_sepBySlash,sep="/")as.vector(strsplit(ids_sepBySlash,sep)[[1]])
 
 #DATA.TABLE ADD IN
 freadvcf<-function(file){
@@ -718,26 +600,32 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
    
      #add command to run the childs qsub
     n_jobs<-ifelse(length(cmd_list)<maxChildJobs,length(cmd_list),maxChildJobs)
-    cmd_list<-split(unlist(cmd_list),1:n_jobs)
     
-    cmds<-sapply(1:length(cmd_list),function(i){
+    if(n_jobs<length(cmd_list)){
+      cmd_list_jobs<-split(cmd_list,1:n_jobs)
+    }else{
+      cmd_list_jobs<-cmd_list
       
-      cmd<-cmd_list[[i]]
-      CreateJobFile(cmd_list =cmd,file = child_jobfiles[[i]],nThreads = nThreads ,proj_name = proj_name ,
+    }
+    
+    cmds<-sapply(1:n_jobs,function(i){
+      
+      cmds_child<-cmd_list_jobs[[i]]
+      CreateJobFile(cmd_list =cmds_child,file = child_jobfiles[[i]],nThreads = nThreads ,proj_name = proj_name ,
                     loadBashrc = loadBashrc,modules = modules,conda_env = conda_env,micromamba_env = micromamba_env,
                     maxHours =  maxHours,memPerCore = memPerCore,parallelize = FALSE)
       
       # Submit the job using qsub and capture the job ID
-      cmd<-paste(paste0('job_id',i,'=$(qsub'), '-N',paste0('j',script_id,child_jobnames[[i]]),child_jobfiles[[i]],proj_name,' | grep -Ewo [0-9]+)')
+      cmd_job<-paste(paste0('job_id',i,'=$(qsub'), '-N',paste0('j',script_id,child_jobnames[[i]]),child_jobfiles[[i]],proj_name,' | grep -Ewo [0-9]+)')
       # cmd<-RunQsub(child_jobfiles[[i]],job_name = paste0('j',script_id,child_jobnames[[i]]),dryrun = T)
-      return(cmd)
+      return(cmd_job)
       
     })
     
     cat( cmds,file = file_path,append = T,sep = '\n')
     
     # Wait until the jobs are completed
-    for(i in 1:length(cmd_list)){
+    for(i in 1:n_jobs){
       cmd_wait<-c(paste('while qstat | grep -w',paste0('"',paste0('$job_id',i),'"'),  '> /dev/null; do'),
                   paste('echo', '"waiting jobs to complete.."'),
                   paste('sleep', '30'), # Adjust sleep time as needed
@@ -867,6 +755,8 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   cat( head(cmds,5),sep = '\n')
   
 }
+
+
 
 CreateJobForPyFile<-function(python_file,proj_name='tcwlab',modules=NULL,
                         loadBashrc=FALSE,conda_env=NULL,
@@ -1161,7 +1051,7 @@ WaitQsub<-function(qsub_file,jobid,max_hours=24){
 }
 
 
-#bash tools wrapper####
+#bedtools tools wrapper####
 bed_inter<- function(a, b, opt1="-wa", opt2="-wb",out_dir=".", select=NULL, col.names=NULL){
   require(data.table)
   l<-list(a,b)
@@ -1199,6 +1089,88 @@ bed_inter<- function(a, b, opt1="-wa", opt2="-wb",out_dir=".", select=NULL, col.
 }
 
 
+#CountBEDOverlap
+#inputs : 1) bed files of the reads and 2) bed files of the genomics regions to count overlap
+#for each genomic region, count how many read overlap using bedtools intersect -c 
+
+#outputs : bed file <bed_file_name>.<genomics_regions_name>.overlap.count.bed.gz of the number of read falling in each genomic region
+CountBEDOverlap<-function(bed_files,genomic_regions_file,
+                          out_dir=NULL,job_file='X-count_bed_overlap.qsub',
+                          job_name = 'countbedoverlap',
+                          write_genomic_regions=TRUE, write_bed_file_intervals=FALSE,
+                          nThreads=NULL,parallelize=F,
+                          maxChildJobs=40,wait_job=TRUE,
+                          wait_for=NULL,dryrun=FALSE){
+  bed_dir=unique(dirname(bed_files))
+  if(is.null(out_dir)){
+    out_dir=bed_dir
+    if(length(out_dir)>1){
+      stop('specify outputs directory')
+    }
+  }
+  if(!dir.exists(out_dir)){
+    dir.create(out_dir)
+  }
+  
+  opt1=ifelse(write_genomic_regions,"-wa",'')
+  opt2=ifelse(write_bed_file_intervals,"-wb",'')
+  
+  
+  cmds<-lapply(bed_files, function(b){
+    paste('bedtools intersect -c',opt1,opt2,'-a',genomic_regions_file,
+          '-b',b,'|gzip -c >',
+          fp(out_dir,ps(tools::file_path_sans_ext(basename(b)),'.',tools::file_path_sans_ext(basename(genomic_regions_file)),
+                        '.overlap.count.bed.gz')))
+  })
+  
+  if(is.null(job_file)){
+    
+    #job_file<-fp('scripts',ps('counts_overlap_',tools::file_path_sans_ext(bed_files[1],'_andCo_with_',tools::file_path_sans_ext(basename(genomic_regions_file)),'.qsub')))
+    
+    for(cmd in cmds){
+      message('running ',cmd)
+      
+      if(!dryrun){
+        system(cmd)
+      }      
+      
+    }
+    
+  }else{
+    
+    CreateJobFile(cmds,file = job_file,
+                  loadBashrc = T,modules = c('bedtools'),
+                  nThreads = nThreads,parallelize =parallelize,
+                  maxChildJobs=maxChildJobs)
+    
+    if(!dryrun){
+      jobid<-RunQsub(job_file,job_name = job_name,wait_for = wait_for)
+      
+      if(wait_job)WaitQsub(job_file,jobid =jobid )
+      
+    }
+    
+  }
+  
+  count_files<- fp(out_dir,ps(tools::file_path_sans_ext(basename(bed_files)),'.',tools::file_path_sans_ext(basename(genomic_regions_file)),
+                              '.overlap.count.bed.gz'))
+  
+  return(count_files)
+  
+}
+
+#Example:
+# introns_counts<-CountBEDOverlap(bed_files =bed_files,
+#                                 genomic_regions_file = 'examples_data/some_introns.bed.gz')
+# 
+# exons_counts<-CountBEDOverlap(bed_files =bed_files,
+#                                 genomic_regions_file = 'examples_data/some_exons.bed.gz')
+# 
+
+
+
+
+
 RunGatk<-function(cmd){
   message('run in a terminal:')
   
@@ -1207,4 +1179,49 @@ RunGatk<-function(cmd){
             'module load gatk/4.4.0.0',
             'conda activate /share/pkg.8/gatk/4.4.0.0/install/gatk-4.4.0.0',
             cmd,sep = '\n'))
+}
+
+
+#genomics annotations access####
+
+GetGTF<-function(gtf='/projectnb/tcwlab/RawData/Genome2.7.9a/hg38/gencode.v26.annotation.gtf',features=NULL){
+  if(!is.null(features)){
+    if(str_detect(gtf,'.gz$')){
+      cmd=paste('zcat',gtf,
+                "|grep -wE",paste0("'",paste(features,collapse = '|'),"'"))
+      
+      
+    }else{
+      cmd=paste("grep -wE",paste0("'",paste(features,collapse = '|'),"'"),gtf)
+      
+    }
+
+    return(fread(cmd = cmd,col.names = c('chr','source','feature_type','start','end','score','strand','frame','anno')))
+    
+  }else{
+    return(fread(gtf,col.names = c('chr','source','feature_type','start','end','score','strand','frame','anno')))
+    
+  }
+  
+}
+GetGenesGTF<-function(genes,genome='hg38',gtf=NULL,anno_sources=c('ENSEMBL','HAVANA'),feature_types='gene'){
+  #feature_type : gene, transcript, exon, CDS, UTR, start_codon, stop_codon
+  if(genome=='hg38'&is.null(gtf)){
+    gtf='/projectnb/tcwlab/RawData/Genome2.7.9a/hg38/gencode.v26.annotation.gtf'
+  }
+  if(genome=='hg19'&is.null(gtf)){
+    gtf='/projectnb/tcwlab/RefData/gencode/hg19/gencode.v19.annotation.gtf.gz'
+  }
+  
+  gtf<-GetGTF(features=genes,gtf = gtf)
+  gtff<-gtf[source%in%anno_sources&feature_type%in%feature_types]
+  gtff[,gene_name:=str_extract(anno,paste(genes,collapse = '|'))]
+  genes_not_found<-setdiff(genes,unique(gtff$gene_name))
+  if(length(genes_not_found)>0){
+    warning(paste(genes_not_found,collapse=','),' coordinates not found in ',anno_sources, 'with feature',features ,'. Try with other source/feature')
+    warning('available sources: ',paste(unique(gtf$source),collapse = ','))
+    warning('available gene features: ',paste(unique(gtf$feature_type),collapse = ','))
+    
+  }
+  return(gtff)
 }

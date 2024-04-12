@@ -89,7 +89,7 @@ get_igraph <- function(res_fgsea, simmat,leading_edge_list,
 
 
 #plot the graphs
-add_category_nodes <- function(p,col.var,cols=c('blue','white','red')) {
+add_category_nodes <- function(p,col.var,cols=c('blue','white','red'),cols_lims=NULL) {
   
   if(!'discrete'%in%cols){
     locol=cols[1]
@@ -108,11 +108,13 @@ add_category_nodes <- function(p,col.var,cols=c('blue','white','red')) {
     
   }else if(!is.null(midcol)){
     p<-p+scale_fill_gradient2(low = locol,mid=midcol, high = hicol,name=col.var,
-                              guide = guide_colorbar()) 
+                              guide = guide_colorbar(),
+                              limits=cols_lims,midpoint = 0) 
     
   }else{
     p<-p+scale_fill_continuous(low = locol, high = hicol,name=col.var,
-                               guide = guide_colorbar())
+                               guide = guide_colorbar(),
+                             limits=cols_lims)
 
   }
   
@@ -140,7 +142,7 @@ emmaplot<-function(res_fgsea,
                    min_edge=0.2,
                    label.size=2.5,
                    cols=c('blue','white','red'),
-                   max.overlaps=10){
+                   max.overlaps=10,cols_lims=NULL){
   require('ggrepel')
   if(!'data.table'%in%class(res_fgsea)){
     res_fgsea<-data.table(res_fgsea)
@@ -151,6 +153,7 @@ emmaplot<-function(res_fgsea,
   if(all(c('term','n.overlap')%in%colnames(res_fgsea))){
     res_fgsea[,pathway:=term]
     res_fgsea[,NES:=fold.enrichment]
+    res_fgsea[,size:=n.overlap]
     
   }
   
@@ -159,7 +162,7 @@ emmaplot<-function(res_fgsea,
   }
   
   if(col.var!='NES'){
-    if(any(table(res_fgsea[,.SD,.SDcols=col.var])>1)){
+    if(all(table(res_fgsea[,.SD,.SDcols=col.var])>1)){
       
       res_fgsea[,(col.var):=lapply(.SD,as.character),.SDcols=col.var]
       
@@ -201,7 +204,7 @@ emmaplot<-function(res_fgsea,
     p <- p + geom_edge_link(alpha=.8, aes_(width=~I(width)),
                             colour='darkgrey')
     ## add dot
-    p <- add_category_nodes(p = p,col.var =col.var,cols=cols)
+    p <- add_category_nodes(p = p,col.var =col.var,cols=cols,cols_lims=cols_lims)
     
     ## add node label
     

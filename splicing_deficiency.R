@@ -37,8 +37,9 @@ BamDownSample<-function(bams,out_dir=NULL,prop=0.01){
 #transform to BED regions the bam
 #usage: bedtools bamtobed -i file.bam > file.bed'
 ConvertBamToBed<-function(bams,out_dir=NULL,job_file=NULL,
+                          job_name = 'bamtobed',
                           nThreads=NULL,parallelize=FALSE,
-                          maxChildJobs=40,wait_job=TRUE,){
+                          maxChildJobs=40,wait_job=TRUE,wait_for=NULL){
   
   bam_dir=unique(dirname(bams))
   if(is.null(out_dir)){
@@ -76,7 +77,7 @@ ConvertBamToBed<-function(bams,out_dir=NULL,job_file=NULL,
                   loadBashrc = T,modules = c('bedtools'),
                   nThreads = nThreads,parallelize =parallelize,maxChildJobs=maxChildJobs )
     
-    jobid<-RunQsub(job_file,job_name = 'bamtobed')
+    jobid<-RunQsub(job_file,job_name = job_name,wait_for = wait_for)
     if(wait_job)WaitQsub(job_file,jobid =jobid )
   }
   
@@ -90,72 +91,11 @@ ConvertBamToBed<-function(bams,out_dir=NULL,job_file=NULL,
 # 
 # bed_files<-ConvertBamToBed(bams = astro_files[1:3],out_dir = 'outputs/03-splicing_def_test',job_file = 'scripts/03-bamtobed_test.qsub',parallelize = TRUE)
 
+
+
 #count number of regions falling in Introns vs Exons canonical rediongs
 #canonical regions extract from ucsc
-#usage: bedtools intersect -c -wa -a regions.bed -b sample.bed
-
-CountBEDOverlap<-function(bed_files,genomic_regions_file,
-                          out_dir=NULL,job_file=NULL,
-                          nThreads=NULL,parallelize=F,
-                          maxChildJobs=40,wait_job=TRUE){
-  bed_dir=unique(dirname(bed_files))
-  if(is.null(out_dir)){
-    out_dir=bed_dir
-    if(length(out_dir)>1){
-      stop('specify outputs directory')
-    }
-  }
-  if(!dir.exists(out_dir)){
-    dir.create(out_dir)
-  }
-  
-  
-  cmds<-lapply(bed_files, function(b){
-    paste('bedtools intersect -c -wa -a',genomic_regions_file,
-          '-b',b,'|gzip -c >',
-          fp(out_dir,ps(tools::file_path_sans_ext(basename(b)),'.',tools::file_path_sans_ext(basename(genomic_regions_file)),
-                        '.overlap.count.bed.gz')))
-  })
-  
-  if(is.null(job_file)){
-    
-    #job_file<-fp('scripts',ps('counts_overlap_',tools::file_path_sans_ext(bed_files[1],'_andCo_with_',tools::file_path_sans_ext(basename(genomic_regions_file)),'.qsub')))
-    
-    for(cmd in cmds){
-      message('running ',cmd)
-      
-      system(cmd)
-      
-      
-    }
-    
-  }else{
-    
-    CreateJobFile(cmds,file = job_file,
-                  loadBashrc = T,modules = c('bedtools'),
-                  nThreads = nThreads,parallelize =parallelize,
-                  maxChildJobs=maxChildJobs)
-    
-    jobid<-RunQsub(job_file,job_name = 'countbedoverlap')
-    
-    if(wait_job)WaitQsub(job_file,jobid =jobid )
-  }
-  
-  count_files<- fp(out_dir,ps(tools::file_path_sans_ext(basename(bed_files)),'.',tools::file_path_sans_ext(basename(genomic_regions_file)),
-                              '.overlap.count.bed.gz'))
-  
-  return(count_files)
-  
-}
-
-#Example:
-# introns_counts<-CountBEDOverlap(bed_files =bed_files,
-#                                 genomic_regions_file = 'examples_data/some_introns.bed.gz')
-# 
-# exons_counts<-CountBEDOverlap(bed_files =bed_files,
-#                                 genomic_regions_file = 'examples_data/some_exons.bed.gz')
-# 
-
+#use CountBEDOverlap
 # #overlapping introns and exons
 SplicingDeficiency<-function(introns_count,exons_count,out_dir){
   

@@ -40,3 +40,66 @@ ScaleDESeq2Covs<-function(mtd,covs){
   mtd_scaled[,(numerical_factors_scaled):=lapply(.SD,scale),.SDcols=numerical_factors]
   return(mtd_scaled)
 }
+
+
+#RunFgseaMsigdb
+#inputs: res_de: datatable of differential expression results, with gene name (in gene symbol format) and statistical test
+#       msigdb_path : path to MSigdb data, should a table with at least column 'pathway', 'gene', and 'category' of the pathways
+#       score : from which column of the res_de to collect the score/statistic to use to rank genes for fgsea?
+#outputs : res of fgsea in data table format
+#Notes : fgsea will be run by 'category' of the Msigdb (Canonical Pathways 'CP' and Gene ontoloy 'GO'  term by default) if  can specify 
+
+RunFgseaMsigdb<-function(res_de,score='stat',
+                         msigdb_path='/projectnb/tcwlab/MSigDB/all_CPandGOs_gene_and_genesets.csv.gz',
+                         genes_cols=c('gene','gene_id','gene_name'),
+                         group.by=NULL,minSize = 10,maxSize = 2000,
+                         gseaParam = 1,scoreType='std',eps=1e-50,
+                         nPermSimple = 1000,...){
+  require(data.table)
+  require(fgsea)
+  if(!'data.table'%in%class(res_de)){
+    if(!any(genes_cols%in%colnames(res_de))){
+      res_de$gene<-rownames(res_de)
+    }
+    res_de<-data.table(res_de)
+  }else{
+    res_de<-copy(res_de)
+  }
+  
+  gene_col=which(colnames(res_de)%in%genes_cols)[1]
+  res_de$gene<-res_de[[1]]
+  
+  if(!is.null(group.by)){
+    res_de_list<-split(res_de,res_de[[group.by]])
+    
+    res_fgsea<-rbindlist(lapply(names(res_de_list),function(g){
+      message('testing msigdb pathway enrichment in ',g)
+      res_gsea<-RunFgseaMsigdb(res_de_list[[g]],score=score,
+                               msigdb_path=msigdb_path,
+                               genes_cols=genes_cols)
+      return(res_gsea[,query:=g])
+      
+    }))
+    
+  }else{
+    msigdb<-fread(msigdb_path)
+    stats<-setNames(res_de[[score]],res_de$gene)
+    res_fgsea<-rbindlist(lapply(unique(msigdb$category), function(cat){
+      
+      msigdbf<-msigdb[category==cat]
+      pathways=split(msigdbf$gene,msigdbf$pathway)
+      res<-fgsea(pathways,stats,minSize = minSize,maxSize = maxSize,
+                 gseaParam = gseaParam,scoreType=scoreType,eps=eps,
+                 nPermSimple = nPermSimple,...)
+      
+      return(res[,category:=cat])
+    }))
+    
+    #annot 
+    res_fgsea<-merge(res_fgsea,unique(msigdb[,-'gene']))[order(padj)]
+    
+  }
+  
+  
+  return(res_fgsea)
+}
