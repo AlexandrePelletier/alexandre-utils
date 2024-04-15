@@ -1,11 +1,11 @@
 
 
+library(igraph)
+library(ggraph)
+library(stringr)
+library(ggplot2)
+library(data.table)
 
-require(igraph)
-require(ggraph)
-require(stringr)
-require(ggplot2)
-require(data.table)
 
 #Useful Functions####
 #get sim matrix

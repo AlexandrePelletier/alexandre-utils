@@ -54,7 +54,7 @@ RunFgseaMsigdb<-function(res_de,score='stat',
                          genes_cols=c('gene','gene_id','gene_name'),
                          group.by=NULL,minSize = 10,maxSize = 2000,
                          gseaParam = 1,scoreType='std',eps=1e-50,
-                         nPermSimple = 1000,...){
+                         nPermSimple = 10000,...){
   require(data.table)
   require(fgsea)
   if(!'data.table'%in%class(res_de)){
@@ -67,7 +67,7 @@ RunFgseaMsigdb<-function(res_de,score='stat',
   }
   
   gene_col=which(colnames(res_de)%in%genes_cols)[1]
-  res_de$gene<-res_de[[1]]
+  res_de$gene<-res_de[[gene_col]]
   
   if(!is.null(group.by)){
     res_de_list<-split(res_de,res_de[[group.by]])

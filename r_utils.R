@@ -131,8 +131,8 @@ bar_rb<-function(invert=FALSE)ifelse(invert,return(scale_fill_manual(values=c('r
 #BIOMART####
 
 
-GetMartGenes<-function()biomaRt::useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
-GetMartMouseGenes<-function()biomaRt::useEnsembl(biomart = "genes", dataset = "mmusculus_gene_ensembl")
+GetMartGenes<-function(mirror=NULL)biomaRt::useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl",mirror=mirror)
+GetMartMouseGenes<-function(mirror=NULL)biomaRt::useEnsembl(biomart = "genes", dataset = "mmusculus_gene_ensembl",mirror=mirror)
 
 GetMartReg<-function()biomaRt::useEnsembl(biomart = "regulation", dataset = "hsapiens_regulatory_feature")
 GetMartMotif<-function()biomaRt::useEnsembl(biomart = "regulation", dataset = "hsapiens_motif_feature")
@@ -295,11 +295,11 @@ tr<-function(ids_sepBySlash,retourne="all",sep="/",tradEntrezInSymbol=FALSE,uniq
 
 
 # Basic function to convert human to mouse gene names
-convertHumanGeneList <- function(x,return_dt=T){
+convertHumanGeneList <- function(x,return_dt=T,mirror=NULL){
   
   require("biomaRt")
-  human =GetMartGenes()
-  mouse = GetMartMouseGenes()
+  human =GetMartGenes(mirror=mirror)
+  mouse = GetMartMouseGenes(mirror=mirror)
   
   genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x , mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
   
@@ -312,11 +312,11 @@ convertHumanGeneList <- function(x,return_dt=T){
   return(mousex)
 }
 
-convertMouseGeneList <- function(x,return_dt=T){
+convertMouseGeneList <- function(x,return_dt=T,mirror=NULL){
   
   require("biomaRt")
-  human =GetMartGenes()
-  mouse = GetMartMouseGenes()
+  human =GetMartGenes(mirror=mirror)
+  mouse = GetMartMouseGenes(mirror=mirror)
   
   genesV2 = getLDS(attributes = c("mgi_symbol"), filters = "mgi_symbol", values = x , mart = mouse, attributesL = c("hgnc_symbol"), martL = human, uniqueRows=T)
   if(return_dt)return(data.table(genesV2))
