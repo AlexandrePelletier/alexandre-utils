@@ -49,7 +49,7 @@ ScaleDESeq2Covs<-function(mtd,covs){
 #outputs : res of fgsea in data table format
 #Notes : fgsea will be run by 'category' of the Msigdb (Canonical Pathways 'CP' and Gene ontoloy 'GO'  term by default) if  can specify 
 
-RunFgseaMsigdb<-function(res_de,score='stat',
+RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
                          msigdb_path='/projectnb/tcwlab/MSigDB/all_CPandGOs_gene_and_genesets.csv.gz',
                          genes_cols=c('gene','gene_id','gene_name'),
                          group.by=NULL,minSize = 10,maxSize = 2000,
@@ -83,7 +83,21 @@ RunFgseaMsigdb<-function(res_de,score='stat',
     
   }else{
     msigdb<-fread(msigdb_path)
-    stats<-setNames(res_de[[score]],res_de$gene)
+    
+    to_rm<-!is.na(res_de[[score]])
+    if(sum(to_rm)>0){
+      warning('removing ',sum(to_rm),' genes containing missing ',score,' value.')
+      res_de<-res_de[!is.na(res_de[[score]])]
+      
+    }
+    if(rankbased){
+      stats<-setNames(sign(res_de[[score]])*rank(abs(res_de[[score]])),res_de$gene)
+      
+    }else{
+      stats<-setNames(res_de[[score]],res_de$gene)
+      
+    }
+    
     res_fgsea<-rbindlist(lapply(unique(msigdb$category), function(cat){
       
       msigdbf<-msigdb[category==cat]

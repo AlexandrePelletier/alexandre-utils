@@ -79,7 +79,7 @@ get_igraph <- function(res_fgsea, simmat,leading_edge_list,
   V(g)$size <- cnt[V(g)$name]
   
   if(!is.null(col.var)){
-    colVar <- as.vector(res_fgseaf[V(g)$name, on='pathway'][,.SD,.SDcols=col.var][[1]])
+    colVar <- res_fgseaf[V(g)$name, on='pathway'][[col.var]]
     V(g)$colvar <- colVar
     
   }
@@ -91,10 +91,11 @@ get_igraph <- function(res_fgsea, simmat,leading_edge_list,
 #plot the graphs
 add_category_nodes <- function(p,col.var,cols=c('blue','white','red'),cols_lims=NULL) {
   
-  if(!'discrete'%in%cols){
+  if(!any('discrete'%in%cols)){
     locol=cols[1]
-    midcol=ifelse(length(cols==3),cols[2],NULL)
-    hicol=cols[-1]
+    if(length(cols)==3)midcol=cols[2]
+    
+    hicol=ifelse(length(cols)==3,cols[3],cols[2])
     
   }
 
@@ -106,7 +107,7 @@ add_category_nodes <- function(p,col.var,cols=c('blue','white','red'),cols_lims=
   if('discrete'%in%cols){
     p<-p+scale_fill_discrete(name=col.var ) 
     
-  }else if(!is.null(midcol)){
+  }else if(length(cols)==3){
     p<-p+scale_fill_gradient2(low = locol,mid=midcol, high = hicol,name=col.var,
                               guide = guide_colorbar(),
                               limits=cols_lims,midpoint = 0) 
@@ -115,6 +116,7 @@ add_category_nodes <- function(p,col.var,cols=c('blue','white','red'),cols_lims=
     p<-p+scale_fill_continuous(low = locol, high = hicol,name=col.var,
                                guide = guide_colorbar(),
                              limits=cols_lims)
+
 
   }
   
@@ -148,6 +150,11 @@ emmaplot<-function(res_fgsea,
     res_fgsea<-data.table(res_fgsea)
   }
   
+  if(!is.null(cols_lims)&length(cols)>2){
+    if(!(any(cols_lims<0)&any(any(cols_lims>=0)))){
+      cols=c('white','red')
+    }
+  }
 
   
   if(all(c('term','n.overlap')%in%colnames(res_fgsea))){
@@ -161,14 +168,14 @@ emmaplot<-function(res_fgsea,
     stop('expected format: fgsea results or overrepresentation results (OR3) format')
   }
   
-  if(col.var!='NES'){
-    if(all(table(res_fgsea[,.SD,.SDcols=col.var])>1)){
+ 
+    if(all(table(res_fgsea[[col.var]])>1)){
       
       res_fgsea[,(col.var):=lapply(.SD,as.character),.SDcols=col.var]
       
       cols='discrete'
     }
-  }
+  
   
   
   if(is.null(pathway_names))pathway_names=res_fgsea[order(pval)]$pathway
@@ -214,7 +221,8 @@ emmaplot<-function(res_fgsea,
     p <- ggplot(res_fgsea[pathway%in%pathway_names][,x:=1][,y:=1],aes_string(x='x',y='x'))+
       geom_point(aes_string(size='size',col=col.var))+
       geom_text_repel(aes(label=pathway))+
-      scale_color_gradient2(low = cols[1],high = cols[max(1:length(cols))],midpoint = 0,limits=c(-abs(as.numeric(as.vector(res_fgsea[pathway%in%pathway_names][,..col.var]))),
+      scale_color_gradient2(low = cols[1],high = cols[length(cols)],
+                            midpoint = 0,limits=c(-abs(as.numeric(as.vector(res_fgsea[pathway%in%pathway_names][,..col.var]))),
                                                                                                  abs(as.numeric(as.vector(res_fgsea[pathway%in%pathway_names][,..col.var])))))+
       theme_graph()
     

@@ -95,7 +95,7 @@ source('emmaplot.R')
 
 #HEATMAPs comparing pathhways###
 
-CompPathways<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=TRUE,save.pdf=NULL,width =7,height = 7,max_color=2){
+CompPathways<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=FALSE,pval_col='padj',save.pdf=NULL,width =7,height = 7,max_color=2){
   require('pheatmap')
   require('data.table')
   
@@ -118,6 +118,7 @@ CompPathways<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=TRUE,save.p
 
   
   #add pvalue
+  res_gsea1[,padj:=.SD,.SDcols=pval_col]
   res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<0.05,'*',ifelse(padj<0.25,'.',''))))]
 
   mat_gseap<-data.frame(dcast(res_gsea1,pathw~comp,value.var ='padjsig'),row.names = 'pathw')

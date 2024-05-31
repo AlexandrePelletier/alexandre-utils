@@ -158,15 +158,15 @@ CorrelCovarPCs<-function(pca,mtd,
 plotPvalsHeatMap<-function(x,main='-log10(Pvalue)',
                            p_col='p',p.thr=0.1,col_breaks=c(20,10:1, 0.5,0.1),
                            legend_breaks=NA,cluster_rows = F,cluster_cols = F,
-                           labels_col=NULL,
-                           labels_row=NULL,
+                           labels_PC=NULL,
+                           labels_Cov=NULL,
                            fontsize=10,
                            fontsize_number = 0.8*fontsize){
   require(pheatmap)
   
   if(p_col%in%colnames(x)){
     pvals_mat<-as.matrix(data.frame(dcast(x,factor~PC,value.var = p_col),row.names = 'factor'))
-    
+    pvals_mat<-pvals_mat[,paste0('PC',1:ncol(pvals_mat))]
   }else{
     pvals_mat<-x
   }
@@ -180,8 +180,8 @@ plotPvalsHeatMap<-function(x,main='-log10(Pvalue)',
            display_numbers = T,
            fontsize = fontsize,
            fontsize_number = fontsize_number,
-           labels_col=labels_col,
-           labels_row=labels_row,
+           labels_col=labels_PC,
+           labels_row=labels_Cov,
            color = colorRampPalette(c("white", "red"))(length(col_breaks)-1),
            breaks = sort(col_breaks),legend_breaks = legend_breaks)
   

@@ -11,6 +11,9 @@ library("ggrepel")
 library("patchwork")
 library("here")
 
+library('qs')
+
+
 
 #basic utils functions####
 
@@ -21,6 +24,10 @@ ps<-function(...,sep="",collapse = NULL)paste(...,sep=sep,collapse = collapse)
 source<-function(file,chdir=TRUE)base::source(file,chdir = chdir)
 
 # Stats Related Functions ####
+#CategoricalsToDummy
+#inputs: covariates in data.table format
+#outputs: dummy matrix : all categorical factors are transformed to binary (0/1) outcomes
+
 CategoricalsToDummy<-function(covs){
   covs2<-copy(covs)
   id_col<-colnames(covs2)[as.vector(unlist(covs2[,lapply(.SD, function(x)length(unique(x))==.N)]))]
@@ -279,7 +286,6 @@ tr<-function(ids_sepBySlash,retourne="all",sep="/",tradEntrezInSymbol=FALSE,uniq
   }else{
     if(uniqu){
       return(unique(IDs[ret]))
-    }else{
       return(IDs[ret])
     }
     
@@ -449,17 +455,45 @@ OR3<-function(querys,terms_list,background,min.term.size=0,max.term.size=Inf,ove
   
 }
 
-#trans in hg38
-hg19to38<-function(x){
-  in_file<-"outputs/temp_hg19.bed"
-  out_file<-"outputs/temp_hg38.bed"
+#Liftover / Coordinates changes
+LiftOver<-function(bed,chainfile,
+                   col.names=c('chr.new','start.new','end.new','id'),
+                   select=NULL){
+  require(data.table)
+#pip install CrossMap
+  #if 'ImportError: libhts.so.3: cannot open shared object file: No such file or directory'
+  #htslib folder should be declare in ~/.Renviron : i.e. 'LD_LIBRARY_PATH=/path/to/htslib-x.xx.x:$LD_LIBRARY_PATH'
+  if(is.null(select)){
+    select<-1:length(col.names)
+  }else{
+    col.names<-col.names[select]
+  }
   
-  fwrite(x,in_file,col.names = F,sep="\t")
+  in_file<-"temp_in.bed"
+  out_file<-"temp_out.bed"
   
-  system(paste("CrossMap.py bed ref/hg19ToHg38.over.chain.gz",in_file,out_file))
-  trans<-fread(out_file,select=c(1,2,3,4),col.names = c("chr","start","end","id"))
+  fwrite(bed,in_file,col.names = F,sep="\t")
+  
+  system(paste("CrossMap.py bed",chainfile,in_file,out_file))
+  
+ 
+  bed_trans<-fread(out_file,select = select,col.names = col.names)
   file.remove(c(in_file,out_file))
-  return(trans)
+  
+  return(bed_trans)
+}
+
+hg19to38<-function(bed){
+  chainfile="/projectnb/tcwlab/RefData/liftover/hg19ToHg38.over.chain.gz"
+  bed_trans<-LiftOver(bed,chainfile =chainfile ,col.names=c('chr','start.hg19','end.hg19','id'),
+)
+  return(bed_trans)
+}
+
+hg38to19<-function(bed){
+  chainfile="/projectnb/tcwlab/RefData/liftover/hg38ToHg19.over.chain.gz"
+  bed_trans<-LiftOver(bed,chainfile =chainfile,col.names=c('chr','start.hg38','end.hg38','id'))
+  return(bed_trans)
 }
 
 
@@ -540,8 +574,12 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
+  if(!str_detect(file,'\\.qsub$')){
+    file=paste0(file,'.qsub')
+  }
   filename<-basename(file)
   projdir<-dirname(file)
+  
   
   while(str_detect(projdir,'scripts')){
     projdir<-dirname(projdir)
@@ -578,8 +616,10 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
     
     script_id=str_extract(filename,'^[0-9A-Za-z]+')
     scripts_dir<-file.path(projdir,'scripts')
-   if(!dir.exists(scripts_dir))dir.create(scripts_dir)
-  
+    childs_dir<-file.path(scripts_dir,paste0(script_id,'childs'))
+    
+   if(!dir.exists(childs_dir))dir.create(childs_dir,recursive = T)
+
     #add the main job parameters
     cat( '#Parameters of the Jobs :',file = file_path,append = T)
     cat( c('\n',proj_name_opt,CombStdOutErr_opt,maxHours_opt,qlog),
@@ -596,7 +636,7 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
         child_jobnames<-paste0('child',1:length(cmd_list))
       }
     
-    child_jobfiles<-file.path(scripts_dir,paste0(script_id,'child-',child_jobnames,'.qsub'))
+    child_jobfiles<-file.path(childs_dir,paste0(child_jobnames,'.qsub'))
    
      #add command to run the childs qsub
     n_jobs<-ifelse(length(cmd_list)<maxChildJobs,length(cmd_list),maxChildJobs)
@@ -611,7 +651,7 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
     cmds<-sapply(1:n_jobs,function(i){
       
       cmds_child<-cmd_list_jobs[[i]]
-      CreateJobFile(cmd_list =cmds_child,file = child_jobfiles[[i]],nThreads = nThreads ,proj_name = proj_name ,
+      CreateJobFile(cmd_list =cmds_child,file = child_jobfiles[i],nThreads = nThreads ,proj_name = proj_name ,
                     loadBashrc = loadBashrc,modules = modules,conda_env = conda_env,micromamba_env = micromamba_env,
                     maxHours =  maxHours,memPerCore = memPerCore,parallelize = FALSE)
       
@@ -689,7 +729,7 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
     
     cat( c('\n',micromamba_env),file = file_path,append = T,sep = '\nmicromamba activate ')
     
-    if('pisces-rabbit'%in%micromamba_env){
+    if(any(c('pisces-rabbit','fungen')%in%micromamba_env)){
       cat( c('\n# singularity specifics configuration: ',
              'export SINGULARITY_BIND="$TMP,/restricted/projectnb/tcwlab-adsp/,/projectnb/tcwlab-adsp/,/projectnb/tcwlab/"',
              'touch .Rprofile'),
@@ -697,6 +737,16 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
 
     }
     cat( '\n',file = file_path,append = T,sep = '\n')
+    
+  }
+  
+  if('simpleaf'%in%micromamba_env){
+    cat( c('\n# simpleaf specifics configuration: ',
+           'export ALEVIN_FRY_HOME="$PWD"', #define env variable
+           'simpleaf set-paths', #simpleaf configuration
+           'ulimit -n 2048'), #update the maximum number of file descriptors a program can create
+         file = file_path,append = T,sep = '\n')
+    
     
   }
   
@@ -735,7 +785,7 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
     
   }
   
-  if('pisces-rabbit'%in%micromamba_env){
+  if(any(c('pisces-rabbit','fungen')%in%micromamba_env)){
     cat( c('\n# Singularity specifics clean up: ',
            'rm .Rprofile'),file = file_path,append = T,sep = '\n')
   }
@@ -1051,7 +1101,7 @@ WaitQsub<-function(qsub_file,jobid,max_hours=24){
 }
 
 
-#bedtools tools wrapper####
+#bedtools/vcf tools wrapper####
 bed_inter<- function(a, b, opt1="-wa", opt2="-wb",out_dir=".", select=NULL, col.names=NULL){
   require(data.table)
   l<-list(a,b)
@@ -1169,8 +1219,6 @@ CountBEDOverlap<-function(bed_files,genomic_regions_file,
 
 
 
-
-
 RunGatk<-function(cmd){
   message('run in a terminal:')
   
@@ -1181,6 +1229,50 @@ RunGatk<-function(cmd){
             cmd,sep = '\n'))
 }
 
+#plink wrapper####
+#TransToVCF
+#inputs bedfile to convert in vcf
+#outputs : vcf file (compressed with bgzipped if bgzip=T), at the same location than the bed file
+#note : return in R the path to the new vcf file. 
+#if dry_run=TRUE, do not execute the code but raterh return the codes in addition to the path to the future vcf (in a list format where $cmds contain the commands, and $vcf contain the path to the vcf)
+TransToVCF<-function(bed_file,bgzip=T,dry_run=FALSE,threads=NULL){
+  file_pref<-tools::file_path_sans_ext(bed_file)
+  vcf_file=paste0(file_pref,'.vcf')  
+  vcfgz_file=paste0(vcf_file,'.gz')
+  
+  
+  tovcf<-paste('plink',
+               '--bfile',file_pref,
+               ifelse(!is.null(threads),paste('--threads',threads),NULL),
+               '--recode vcf',
+               '--out',file_pref)
+  zip=paste('bgzip -f',vcf_file)
+  tabix=paste('tabix',vcfgz_file)
+  clean=paste('rm -f',vcf_file)
+  
+  if(!dry_run){
+    system(tovcf)
+    if(bgzip){
+      system(zip)
+      system(tabix)
+      system(clean)
+      return(vcfgz_file)
+    }else{
+      return(vcf_file)
+      
+    }
+    
+  }else{
+    if(bgzip){
+      return(list(cmds=c(tovcf,zip,tabix,clean),vcf=vcfgz_file))
+      
+    }else{
+      return(list(cmds=c(tovcf),vcf=vcf_file))
+      
+    }
+  }
+  
+}
 
 #genomics annotations access####
 
@@ -1215,7 +1307,40 @@ GetGenesGTF<-function(genes,genome='hg38',gtf=NULL,anno_sources=c('ENSEMBL','HAV
   
   gtf<-GetGTF(features=genes,gtf = gtf)
   gtff<-gtf[source%in%anno_sources&feature_type%in%feature_types]
-  gtff[,gene_name:=str_extract(anno,paste(genes,collapse = '|'))]
+  gtff[,gene_name:=sapply(anno,function(x){
+    annos<-strsplit(x,'; ')[[1]]
+    annos<-annos[str_detect(annos,'gene_name')]
+    anno=str_remove_all(annos,'"| |gene_name')
+    return(anno)
+  })]
+  gtff[,gene_id:=sapply(anno,function(x){
+    annos<-strsplit(x,'; ')[[1]]
+    annos<-annos[str_detect(annos,'gene_id')]
+    anno=str_remove_all(annos,'"| |gene_id')
+    return(anno)
+  })]
+  if('transcript'%in%feature_types){
+    
+    gtff[feature_type=='transcript',transcript_name:=sapply(anno,function(x){
+      annos<-strsplit(x,'; ')[[1]]
+      annos<-annos[str_detect(annos,'transcript_name')]
+      anno=str_remove_all(annos,'"| |transcript_name')
+      return(anno)
+    })]
+    gtff[feature_type=='transcript',transcript_id:=sapply(anno,function(x){
+      annos<-strsplit(x,'; ')[[1]]
+      annos<-annos[str_detect(annos,'transcript_id')]
+      anno=str_remove_all(annos,'"| |transcript_id')
+      return(anno)
+      
+    })]
+    gtff[feature_type=='transcript',transcript_type:=sapply(anno,function(x){
+      annos<-strsplit(x,'; ')[[1]]
+      annos<-annos[str_detect(annos,'transcript_type')]
+      anno=str_remove_all(annos,'"| |transcript_type')
+      return(anno)
+    })]
+  }
   genes_not_found<-setdiff(genes,unique(gtff$gene_name))
   if(length(genes_not_found)>0){
     warning(paste(genes_not_found,collapse=','),' coordinates not found in ',anno_sources, 'with feature',features ,'. Try with other source/feature')
@@ -1225,3 +1350,24 @@ GetGenesGTF<-function(genes,genome='hg38',gtf=NULL,anno_sources=c('ENSEMBL','HAV
   }
   return(gtff)
 }
+
+#Interaction with bash####
+#bgzip : compressed in bed.gz like table
+#input: x: data.table with 1: chr, 2: start, 3: end
+#file=  bed.gz filename
+#output; bed.gz file compressed with bgzip and .bed.tbi
+bgzip<-function(x,bgz_file,sort_coord=FALSE,header=TRUE){
+  require('data.table')
+  bed_file<-tools::file_path_sans_ext(bgz_file)
+  if(sort_coord)
+    setorderv(x,cols = colnames(x)[1:2],order = 1)
+  
+  fwrite(x,bed_file,sep='\t',col.names = header)
+  system(paste('bgzip -f',bed_file))
+  system(paste('tabix',bgz_file))
+  system(paste('rm -f',bed_file))
+  message(bgz_file,' created')
+  return(bgz_file)
+  
+}
+
