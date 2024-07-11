@@ -1,0 +1,53 @@
+#!/bin/bash -l
+#Parameters of the Jobs :
+
+#$-P  tcwlab
+#$-j y
+#$-l h_rt=24:00:00
+#$-o  ./logs/03-bamtobed_test.log
+
+
+#keep track of some information just in case anything goes wrong
+echo "=========================================================="
+echo "Starting on : $(date)"
+echo "Running on node : $(hostname)"
+echo "Current directory : $(pwd)"
+echo "Current job ID : $JOB_ID"
+echo "Current job name : $JOB_NAME"
+if [[ -n "${SGE_TASK_ID}" && $SGE_TASK_ID != "undefined" ]]; then
+    echo "Task index number : $SGE_TASK_ID"
+fi
+if [[ -n "${SGE_TASK_LAST}" && $SGE_TASK_LAST != "undefined" ]]; then
+    echo "Total task number : $SGE_TASK_LAST"
+fi
+echo "=========================================================="
+
+job_id1=$(qsub -N j03child1 ./scripts/03child-child1.qsub tcwlab  | grep -Ewo [0-9]+)
+job_id2=$(qsub -N j03child2 ./scripts/03child-child2.qsub tcwlab  | grep -Ewo [0-9]+)
+job_id3=$(qsub -N j03child3 ./scripts/03child-child3.qsub tcwlab  | grep -Ewo [0-9]+)
+
+
+while qstat | grep -w "$job_id1" > /dev/null; do
+echo "waiting jobs to complete.."
+sleep 30
+done
+echo "Job1 have completed."
+
+
+while qstat | grep -w "$job_id2" > /dev/null; do
+echo "waiting jobs to complete.."
+sleep 30
+done
+echo "Job2 have completed."
+
+
+while qstat | grep -w "$job_id3" > /dev/null; do
+echo "waiting jobs to complete.."
+sleep 30
+done
+echo "Job3 have completed."
+
+echo "=========================================================="
+echo "Finished Analysis for job $JOB_ID on : $(date)"
+echo "=========================================================="
+

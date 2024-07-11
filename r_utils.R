@@ -518,7 +518,6 @@ FindGO_ID<-function(term_descriptions){
 
 
 
-
 #genomics coordinates manipulation ####
 start<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-")[[1]][2]))
 end<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-")[[1]][3]))
