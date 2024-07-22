@@ -70,7 +70,8 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
   res_de$gene<-res_de[[gene_col]]
   
   if(!is.null(group.by)){
-    res_de_list<-split(res_de,res_de[[group.by]])
+   
+    res_de_list<-split(res_de,by=group.by)
     
     res_fgsea<-rbindlist(lapply(names(res_de_list),function(g){
       message('testing msigdb pathway enrichment in ',g)
@@ -84,17 +85,17 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
   }else{
     msigdb<-fread(msigdb_path)
     
-    to_rm<-!is.na(res_de[[score]])
+    to_rm<-is.na(res_de[[score]])
     if(sum(to_rm)>0){
       warning('removing ',sum(to_rm),' genes containing missing ',score,' value.')
-      res_de<-res_de[!is.na(res_de[[score]])]
+      res_de<-res_de[!to_rm]
       
     }
     if(rankbased){
       stats<-setNames(sign(res_de[[score]])*rank(abs(res_de[[score]])),res_de$gene)
-      
     }else{
       stats<-setNames(res_de[[score]],res_de$gene)
+      print(head(sort(stats,de)))
       
     }
     

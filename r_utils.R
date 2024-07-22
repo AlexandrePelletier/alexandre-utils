@@ -447,7 +447,7 @@ OR3<-function(querys,terms_list,background,min.term.size=0,max.term.size=Inf,ove
       res_or[,genes.overlap:=paste(queryf[queryf%in%terms_listf[[term]]],collapse="|"),by="term"]
     }
     if(verbose)message(nrow(res_or[padj<0.05])," terms enriched in your genes of interest with padj<0.05")
-    return(res_or)
+    return(res_or[order(padj)])
   }
   
 }
