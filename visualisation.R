@@ -95,11 +95,13 @@ source('emmaplot.R')
 
 #HEATMAPs comparing pathhways###
 
-CompPathways<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=FALSE,pval_col='padj',save.pdf=NULL,width =7,height = 7,max_color=2){
+CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE,
+                       pval_col='padj',effect_col='NES',pathw_col='pathway',
+                       save.pdf=NULL,width =7,height = 7,max_color=2){
   require('pheatmap')
   require('data.table')
+  res_gsea1<-copy(res_gsea_or_or)
   
-  res_gsea1<-copy(res_gsea)
   if(length(group.by)>1){
     res_gsea1[,comp:=Reduce(function(...)paste(...,sep='_'),.SD),.SDcols=group.by]
     
@@ -109,12 +111,12 @@ CompPathways<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=FALSE,pval_
   }
   
   if(rm.refkey)
-    res_gsea1[,pathw:=removeRefKey(pathway)]
+    res_gsea1[,pathw:=removeRefKey(.SD),.SDcols=pathw_col]
   else
-    res_gsea1[,pathw:=pathway]
+    res_gsea1[,pathw:=.SD,.SDcols=pathw_col]
   
   mat_gsea<-data.frame(dcast(res_gsea1,
-                           pathw~comp,value.var ='NES'),row.names = 'pathw')
+                           pathw~comp,value.var =effect_col),row.names = 'pathw')
 
   
   #add pvalue
@@ -142,7 +144,7 @@ CompPathways<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=FALSE,pval_
                    color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
                                                                          "RdBu")))(length(col_breaks)-1),
                    fontsize_row = 7,
-                   main='NES',
+                   main=effect_col,
                    display_numbers = mat_gseap[rownames(mat_gsea),colnames(mat_gsea)],
                    cluster_cols = T,
                    cellwidth =16,
@@ -159,7 +161,7 @@ CompPathways<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=FALSE,pval_
                  color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 6, name =
                                                                        "RdBu")))(length(col_breaks)-1),
                  fontsize_row = 7,
-                 main='NES',
+                 main=effect_col,
                  display_numbers = mat_gseap[rownames(mat_gsea),colnames(mat_gsea)],
                  cluster_cols = T,
                  cellwidth =16,

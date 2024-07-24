@@ -1,5 +1,5 @@
 
-PrepDESeq2Design<-function(mtd,covs,scale_num=FALSE){
+PrepDESeq2Design<-function(mtd,covs,scale_num=TRUE){
   
   #remove if all sample have the same value
   to_keep<-sapply(covs,function(cov)length(unique(mtd[[cov]]))!=1)
@@ -48,10 +48,11 @@ ScaleDESeq2Covs<-function(mtd,covs){
 #       score : from which column of the res_de to collect the score/statistic to use to rank genes for fgsea?
 #outputs : res of fgsea in data table format
 #Notes : fgsea will be run by 'category' of the Msigdb (Canonical Pathways 'CP' and Gene ontoloy 'GO'  term by default) if  can specify 
-
+#duplicate_choice: how deal with duplicated gene_names / id/.  'random'ly pick one (default), or keep only the 'top' one based on the stat, or do 'nothing'. 
 RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
                          msigdb_path='/projectnb/tcwlab/MSigDB/all_CPandGOs_gene_and_genesets.csv.gz',
-                         genes_cols=c('gene','gene_id','gene_name'),
+                         genes_cols=c('gene','gene_name','gene_id'),
+                         duplicate_choice='random',
                          group.by=NULL,minSize = 10,maxSize = 2000,
                          gseaParam = 1,scoreType='std',eps=1e-50,
                          nPermSimple = 10000,...){
@@ -91,11 +92,30 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
       res_de<-res_de[!to_rm]
       
     }
+    dups<-duplicated(res_de[order(-res_de[[score]])]$gene_name)
+    
+    if(sum(dups)>0){
+      if(sum(dups)>0.75*length(unique(res_de$gene_name))){
+        stop('>75% of duplicated gene names, probably several non separated conditions.')
+      }
+      warning(sum(dups),' duplicated genes')
+      if(duplicate_choice=='top'){
+        warning(' removing them by picking the top stat per gene')
+        res_de<-res_de[order(-res_de[[score]])][!(dups)]
+        
+        
+      }else if(duplicate_choice=='random'){
+        warning(' removing them by randomly picking one unique gene')
+        res_de<-unique(res_de[sample(1:nrow(res_de))],by=gene_col)
+      
+      }
+    }
+    
     if(rankbased){
       stats<-setNames(sign(res_de[[score]])*rank(abs(res_de[[score]])),res_de$gene)
     }else{
       stats<-setNames(res_de[[score]],res_de$gene)
-      print(head(sort(stats,de)))
+      print(head(sort(stats,decreasing = T)))
       
     }
     
