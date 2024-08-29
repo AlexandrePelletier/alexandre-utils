@@ -8,7 +8,11 @@ require(data.table)
 source<-function(file,chdir=TRUE)base::source(file,chdir = chdir)
 
 #DIFFERENTIAL EXPRESSION RESULTS####
-#HEATMAPS comparing DEGs 
+#CompDEGs: HEATMAPS comparing DEGs of different groups/comparison
+#INPUT:
+#res_des: data.table of the differential expression results for the genes to compare. 
+#group.by: the column(s) in this data.table of the groups to compare
+#OUTPUT: a pheatmap heatmap with asterisk for each gene-comparison if p<0.001 : ***, p<0.01: **, p<0.05: *, p<0.25: '.'. 
 CompDEGs<-function(res_des,
                    group.by,
                    gene_column='gene',
