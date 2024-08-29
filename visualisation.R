@@ -58,7 +58,7 @@ CompDEGs<-function(res_des,
   if(!is.null(save.pdf)){
     
     pdf(save.pdf,width =width,height = height)
-    print(pheatmap(mat_de,
+    print(pheatmap::pheatmap(mat_de,
                    breaks =col_breaks,
                    show_rownames=show_rownames,
                    color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
@@ -73,7 +73,7 @@ CompDEGs<-function(res_des,
     
     dev.off()
   }
-  return(pheatmap(mat_de,
+  return(pheatmap::pheatmap(mat_de,
                   breaks =col_breaks,
                   color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
                                                                         "RdBu")))(length(col_breaks)-1),
