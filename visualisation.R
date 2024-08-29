@@ -12,6 +12,9 @@ source<-function(file,chdir=TRUE)base::source(file,chdir = chdir)
 #INPUT:
 #res_des: data.table of the differential expression results for the genes to compare. 
 #group.by: the column(s) in this data.table of the groups to compare
+#gene_column: name of the column with the gene name of the DEGs, 
+#FC_column: name of the column with the log2 Fold change of the DEGs, 
+#pval_column: name of the column with the (adjuster) pvalue of the DEGs, 
 #OUTPUT: a pheatmap heatmap with asterisk for each gene-comparison if p<0.001 : ***, p<0.01: **, p<0.05: *, p<0.25: '.'. 
 CompDEGs<-function(res_des,
                    group.by,
