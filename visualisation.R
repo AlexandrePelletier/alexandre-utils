@@ -8,7 +8,16 @@ require(data.table)
 source<-function(file,chdir=TRUE)base::source(file,chdir = chdir)
 
 #DIFFERENTIAL EXPRESSION RESULTS####
-#HEATMAPS comparing DEGs 
+#CompDEGs: HEATMAPS comparing DEGs of different groups/comparison
+#INPUT:
+#res_des: data.table of the differential expression results for the genes to compare. 
+#group.by: the column(s) in this data.table of the groups to compare
+#gene_column: name of the column with the gene name of the DEGs, 
+#FC_column: name of the column with the log2 Fold change of the DEGs, 
+#pval_column: name of the column with the (adjuster) pvalue of the DEGs,
+#col_range: adjust the minimum and maximum value of the fold change colors
+#save.pdf: where to save the heatmap as pdf. default NULL (not save as pdf)
+#OUTPUT: a pheatmap heatmap with asterisk for each gene-comparison if p<0.001 : ***, p<0.01: **, p<0.05: *, p<0.25: '.'. 
 CompDEGs<-function(res_des,
                    group.by,
                    gene_column='gene',
@@ -49,7 +58,7 @@ CompDEGs<-function(res_des,
   if(!is.null(save.pdf)){
     
     pdf(save.pdf,width =width,height = height)
-    print(pheatmap(mat_de,
+    print(pheatmap::pheatmap(mat_de,
                    breaks =col_breaks,
                    show_rownames=show_rownames,
                    color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
@@ -64,7 +73,7 @@ CompDEGs<-function(res_des,
     
     dev.off()
   }
-  return(pheatmap(mat_de,
+  return(pheatmap::pheatmap(mat_de,
                   breaks =col_breaks,
                   color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
                                                                         "RdBu")))(length(col_breaks)-1),
