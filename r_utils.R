@@ -20,6 +20,7 @@ ps<-function(...,sep="",collapse = NULL)paste(...,sep=sep,collapse = collapse)
 
 source<-function(file,chdir=TRUE)base::source(file,chdir = chdir)
 
+qs<-function()system('qstat -u adpelle1')
 # Stats Related Functions ####
 #CategoricalsToDummy
 #inputs: covariates in data.table format
@@ -399,9 +400,14 @@ OR2<-function(querys,terms_list,size_universe,min.term.size=0,max.term.size=Inf,
   
 }
 
-OR3<-function(querys,terms_list,background,min.term.size=0,max.term.size=Inf,overlap_column=TRUE,verbose=FALSE){
+OR3<-function(querys,terms_list,background,
+              min.term.size=0,
+              max.term.size=Inf,
+              min.query.size=5,
+              overlap_column=TRUE,verbose=FALSE,underrepr=FALSE){
   if(is.list(querys)){
-    dt<-Reduce(rbind,lapply(names(querys),
+    querys_sizes=sapply(querys,length)
+    dt<-Reduce(rbind,lapply(names(querys)[querys_sizes>=min.query.size],
                             function(q)OR3(querys = querys[[q]],
                                            terms_list = terms_list,
                                            background = background,
@@ -435,11 +441,11 @@ OR3<-function(querys,terms_list,background,min.term.size=0,max.term.size=Inf,ove
     res_or[,pct.term.background:=term.size/background_size] 
     
     
-    res_or[,pval:=phyper(q=n.overlap-1, 
+    res_or[,pval:=phyper(q=ifelse(underrepr,n.overlap,n.overlap-1), 
                          m=term.size, 
                          n=background_size-term.size, 
                          k=n.query, 
-                         lower.tail=FALSE),
+                         lower.tail=underrepr),
            by="term"]
     res_or[,padj:=p.adjust(pval,method = 'BH')]
     res_or[,fold.enrichment:=pct.query.overlap/pct.term.background]
@@ -519,9 +525,9 @@ FindGO_ID<-function(term_descriptions){
 
 
 #genomics coordinates manipulation ####
-start<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-")[[1]][2]))
-end<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-")[[1]][3]))
-seqid<-function(x)sapply(x,function(x)strsplit(x,"-")[[1]][1])
+start<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_")[[1]][2]))
+end<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_")[[1]][3]))
+seqid<-function(x)sapply(x,function(x)strsplit(x,"-|:|_")[[1]][1])
 
 
 MethChangeReg<-function(res_meth,region){
@@ -635,19 +641,18 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
     child_jobfiles<-file.path(childs_dir,paste0(child_jobnames,'.qsub'))
    
      #add command to run the childs qsub
-    n_jobs<-ifelse(length(cmd_list)<maxChildJobs,length(cmd_list),maxChildJobs)
+    n_jobs<-ifelse(length(cmd_list)<=maxChildJobs,length(cmd_list),maxChildJobs)
     
-    if(n_jobs<length(cmd_list)){
-      cmd_list_jobs<-split(cmd_list,1:n_jobs)
-    }else{
-      cmd_list_jobs<-cmd_list
-      
-    }
+   
+    cmd_list_jobs<-split(cmd_list,1:n_jobs)
+    
     
     cmds<-sapply(1:n_jobs,function(i){
       
       cmds_child<-cmd_list_jobs[[i]]
-      CreateJobFile(cmd_list =cmds_child,file = child_jobfiles[i],nThreads = nThreads ,proj_name = proj_name ,
+      CreateJobFile(cmd_list =cmds_child,file = child_jobfiles[i],
+                    cwd = cwd,
+                    nThreads = nThreads ,proj_name = proj_name ,
                     loadBashrc = loadBashrc,modules = modules,conda_env = conda_env,micromamba_env = micromamba_env,
                     maxHours =  maxHours,memPerCore = memPerCore,parallelize = FALSE)
       
@@ -752,7 +757,7 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   
   #go to cwd
   if(cwd!='.'){
-    cat( paste('mkdir',cwd),file = file_path,append = T,sep = '\n')
+    cat( paste('mkdir -p',cwd),file = file_path,append = T,sep = '\n')
     cat( paste('cd',cwd),file = file_path,append = T,sep = '\n')
     
     cat( '\n',file = file_path,append = T,sep = '\n')
@@ -772,16 +777,18 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   cat( cmds,file = file_path,append = T,sep = '\n')
   
   
-  #go back to cwd
-  if(cwd!='.'){
-    cwd<-getwd()
-    cat( paste('cd',cwd),file = file_path,append = T,sep = '\n')
-    
-    cat( '\n',file = file_path,append = T,sep = '\n')
-    
-  }
+  
   
   if(any(c('pisces-rabbit','fungen')%in%micromamba_env)){
+    #go back to cwd
+    if(cwd!='.'){
+      cwd<-getwd()
+      cat( paste('cd',cwd),file = file_path,append = T,sep = '\n')
+      
+      cat( '\n',file = file_path,append = T,sep = '\n')
+      
+    }
+    
     cat( c('\n# Singularity specifics clean up: ',
            'rm .Rprofile'),file = file_path,append = T,sep = '\n')
   }
@@ -911,10 +918,12 @@ CreateJobForPyFile<-function(python_file,proj_name='tcwlab',modules=NULL,
 }
 
 #CreateJobForRfile~~~~
-#create job to execute R file unsig Rscript rfile.R [args]
-#args should be a list of argument to pass to Rscripts. 
-#If the first argument is a vector, will create a Rscript command by vector element and paste it as argument
-#ie Rscript rfile.R element1
+#create job to execute R file using Rscript rfile.R [args]
+#args should be a list of argument to pass to Rscript command. 
+#If the first argument is a vector, will create one Rscript command by element of this vector
+#eg Rscript rfile.R element1
+# Rscript rfile.R element2
+
 
 CreateJobForRfile<-function(r_file,args=NULL,
                             parallelize=NULL,maxChildJobs=60,
@@ -931,7 +940,6 @@ CreateJobForRfile<-function(r_file,args=NULL,
       }
     }
   }
-  
   
 
   qsub_file<-str_replace(r_file,'\\.R$','.qsub')
@@ -952,8 +960,8 @@ CreateJobForRfile<-function(r_file,args=NULL,
     cmds<-paste('Rscript',r_file,'>>',log_file)
     
   }else{
-  cmds<-lapply(args[[1]], function(arg1){
-    cmd<-paste('Rscript',r_file,arg1,paste(args[-1],collapse = ' '),'>>',paste0(str_replace(log_file,'.log$','_'),arg1,'.log'))
+  cmds<-lapply(as.character(args[[1]]), function(arg1){
+    cmd<-paste('Rscript',r_file,arg1,paste(args[-1],collapse = ' '),'>>',paste0(str_replace(log_file,'.log$','_'),basename(arg1),'.log'))
     return(cmd)
   })
   
@@ -1066,9 +1074,17 @@ WaitQsub<-function(qsub_file,jobid,max_hours=24){
 
 
 #bedtools/vcf tools wrapper####
-bed_inter<- function(a, b, opt1="-wa", opt2="-wb",out_dir=".", select=NULL, col.names=NULL){
+bed_inter<- function(a, b, opt1="-wa",
+                     opt2="-wb",out_dir=".",
+                     select=NULL, col.names=NULL){
   require(data.table)
   l<-list(a,b)
+  #order chr and pos
+  l<-lapply(l, function(x){
+    chr_cols<-colnames(x)[1:2]
+    setorderv(x,chr_cols)
+  })
+  
   files_to_rm<-c(FALSE,FALSE)
   file_paths<-sapply(1:2, function(i){
     x<-l[[i]]
@@ -1263,7 +1279,7 @@ GetGTF<-function(gtf='/projectnb/tcwlab/RawData/Genome2.7.9a/hg38/gencode.v26.an
 GetGenesGTF<-function(genes,genome='hg38',gtf=NULL,anno_sources=c('ENSEMBL','HAVANA'),feature_types='gene'){
   #feature_type : gene, transcript, exon, CDS, UTR, start_codon, stop_codon
   if(genome=='hg38'&is.null(gtf)){
-    gtf='/projectnb/tcwlab/RawData/Genome2.7.9a/hg38/gencode.v26.annotation.gtf'
+    gtf='/projectnb/tcwlab/RefData/gencode/hg38/gencode.v45.annotation.gtf'
   }
   if(genome=='hg19'&is.null(gtf)){
     gtf='/projectnb/tcwlab/RefData/gencode/hg19/gencode.v19.annotation.gtf.gz'
@@ -1313,6 +1329,20 @@ GetGenesGTF<-function(genes,genome='hg38',gtf=NULL,anno_sources=c('ENSEMBL','HAV
     
   }
   return(gtff)
+}
+
+GetSNPsInfos<-function(rsids,snp_db='/projectnb/tcwlab/RefData/SNPs/snp141.txt.gz'){
+  
+  cmd=paste('zcat',snp_db,
+            "|grep -wE",paste0("'",paste(rsids,collapse = '|'),"'"))
+  #or : zcat snp137.txt.gz | grep -Fwf myRsIDs.txt > mySnps.txt
+  # fwrite(data.table(rsids),tempfile,col.names =FALSE)
+  # cmd=paste('zcat',snp_db,
+  #           "|grep -Fwf",tempfile)
+  return(fread(cmd = cmd,select=c(2:5,7,8,9,10,12,14,15,16,18),
+               col.names =c('chr','start','end','rsid','strand','ref','ref_ucsc','alleles','type','maf','maf_se','function','align_qual')))
+  #col.names = c('chr','source','feature_type','start','end','score','strand','frame','anno')
+  
 }
 
 #Interaction with bash####

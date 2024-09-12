@@ -3,29 +3,17 @@ source<-function(file,chdir=TRUE)base::source(file,chdir = chdir)
 source('r_utils.R')
 
 ####Signac####
-GetMotifIDs<-function(object,motif.names,assay=NULL,return_dt=FALSE){
-  if(is.null(assay))assay<-DefaultAssay(object)
-  idx<-match(motif.names,object@assays[[assay]]@motifs@motif.names)
-  if(return_dt){
-    return(
-      data.table(motif.name=motif.names,
-                 motif.id=names(object@assays[[assay]]@motifs@motif.names[idx]))
-    )
-  }else{
-    return(names(object@assays[[assay]]@motifs@motif.names[idx]))
-  }
-  
-}
 
-CheckMotif<-function(object,peaks,motif.name,assay = NULL,return.peaks=FALSE){
+
+CheckMotif<-function(object,peaks,motif.name=NULL,assay = NULL,return.peaks=FALSE){
   require("Signac")
   if(is.null(assay))assay<-DefaultAssay(object)
   motif<-GetMotifIDs(object,motif.name,assay=assay)
   motif.all <- GetMotifData(
-    object = object, assay = assay, slot = "data"
-  )
+    object = object, assay = assay, slot = "data")
   
   motifs_peaks_tf <- motif.all[peaks,motif , drop = FALSE]
+  
   if(return.peaks){
     motifs_peaks_tf<-rownames(motifs_peaks_tf)[as.vector(motifs_peaks_tf==1)]
     return(motifs_peaks_tf)
@@ -50,27 +38,58 @@ GetMotifIDs<-function(object,motif.names,assay=NULL,return_dt=FALSE){
   }
   
 }
-GetMotif<-function(object,peaks,motifs=NULL,assay = "peaks"){
+
+GetMotifs<-function(object,peaks,motifs=NULL,assay = NULL){
   #return tfmotif peak data.table
   require("Signac")
   require("data.table")
   
-  if(is.null(assay))assay<-DefaultAssay(object)
+  if(is.null(assay))assay=DefaultAssay(object)
+  
   motif.all <- GetMotifData(
     object = object, assay = assay, slot = "data"
   )
+  
   if(is.null(motifs)) motifs<-colnames(motif.all)
+  
   motif.filtered<-motif.all[peaks,motifs,drop=F]
+  
   motif_dt<-melt(data.table(as.matrix(motif.filtered),keep.rownames = "peak"),
                  variable.name="motif",value.name = "presence")
+  
   motif_dt[,presence:=as.logical(presence)]
   motif_dt[(presence)] 
   motif_dt<-motif_dt[(presence)][,-"presence"]
   
-  motifsnames<-data.table(motif.name=object@assays$peaks@motifs@motif.names,motif=names(object@assays$peaks@motifs@motif.names))
+  motifsnames<-data.table(motif.name=object[[assay]]@motifs@motif.names,
+                          motif=names(object[[assay]]@motifs@motif.names))
   motif_dt<-merge(motif_dt,motifsnames)
+  
+  ranges_list<-object[[assay]]@motifs@positions[ unique(motif_dt$motif)]
+
+  motifs_pos <- rbindlist(lapply(names(ranges_list),function(motifid){
+    
+    motif_pos<-rbindlist(lapply(peaks, function(peak){
+      start.pos <- start(peak)
+      end.pos <- end(peak)
+      chromosome <- seqid(peak)
+      data.table(as.data.frame(ranges_list[[motifid]]))[seqnames==chromosome&start>start.pos&end<end.pos][,motif:=motifid][,peak:=peak]
+      
+    }))
+    
+    
+  }))
+  
+  motif_dt=merge(motif_dt,motifs_pos,by=c('motif','peak'))
+
+  
+  
   return(motif_dt)
 }
+
+
+
+
 
 
 
@@ -94,7 +113,7 @@ TFMotifPlot<-function(object,region,motif.name,assay=NULL){
   return(p)
 }
 
-TFsMotifPlot<-function(object,region,motif.names,assay=NULL,size=2,alpha=1,pad=0){
+TFsMotifPlot<-function(object,region,motif.names,assay=NULL,size=2,alpha=1,pad=0,expand=FALSE){
   if(is.null(assay))assay<-DefaultAssay(object)
   start.pos <- start(region)
   end.pos <- end(region)
@@ -108,10 +127,15 @@ TFsMotifPlot<-function(object,region,motif.names,assay=NULL,size=2,alpha=1,pad=0
     return(dt)
   }
   ))
-  
-  
-  p<-ggplot(data = dt_region) + geom_segment(aes(x = start-pad, y = 0, 
-                                                 xend = end+pad, yend = 0,col=motif.name), size = size,alpha=alpha, data = dt_region)
+  if(expand){
+    p<-ggplot(data = dt_region) + geom_segment(aes(x = start-pad, y = as.numeric(as.factor(motif.name)), 
+                                                   xend = end+pad, yend = as.numeric(as.factor(motif.name)),col=motif.name), size = size,alpha=alpha, data = dt_region)
+    
+  }else{
+    p<-ggplot(data = dt_region) + geom_segment(aes(x = start-pad, y = 0, 
+                                                   xend = end+pad, yend = 0,col=motif.name), size = size,alpha=alpha, data = dt_region)
+    
+  }
   
   p<-p+ theme_classic() + ylab(label = "TF motif") + 
     theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) + 

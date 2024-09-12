@@ -1,7 +1,8 @@
 #MajiqConfig####
 #input ; metadata (data.table format) containing bam file paths, and covariate to group by the samples
 #output : create <config_file> for `majiq build`
-MajiqConfig<-function(mtd_bams,config_file,bam_file_col='bam',group.by='sample_id',genome='hg38',strandness='reverse'){
+MajiqConfig<-function(mtd_bams,config_file,bam_file_col='bam',
+                      group.by='sample_id',genome='hg38',strandness='reverse'){
   bams=mtd_bams[[bam_file_col]]
   groups=mtd_bams[[group.by]]
   bam_dir=unique(dirname(bams))
@@ -46,34 +47,45 @@ MajiqConfig<-function(mtd_bams,config_file,bam_file_col='bam',group.by='sample_i
 FormatVoilaHet<-function(res_voila,case_name,control_name){
   
    
-  #first, reformat the PSI columns (containing ';')
-    res_long<-FormatVoilaPSI(res_voila)
-  
-    #then, take care of harmonizing the dtpsi/HET specific column: 
-    cols_control=colnames(res_voila)[str_detect(colnames(res_voila),control_name)]
-    cols_case=colnames(res_voila)[str_detect(colnames(res_voila),case_name)]
-    #cols_groups<-c(cols_control,cols_case)
-    
-  
-    #generalized case and control columns
-    for(col in cols_control){
-      setnames(res_long,col,paste0(str_remove(col,paste0(control_name,'_')),'_control'))
-      
-    }
-    for(col in cols_case){
-      setnames(res_long,col,paste0(str_remove(col,paste0(case_name,'_')),'_case'))
-      
-    }
-    res_long[,case:=case_name]
-    res_long[,control:=control_name]
-    
-    
+  #first, reformat the PSI columns (containing ';') and take care of harmonizing the dtpsi/HET specific column: 
+
+    res_long<-FormatVoilaDtPsi(res_voila,case_name=case_name,control_name=control_name)
+
+    #add Heterogen specific information    
     res_long[,dt_median_psi:=median_psi_case-median_psi_control]
     res_long[,diff_spliced:=abs(dt_median_psi)>0.1&WILCOXON<0.05&TTEST<0.05&TNOM<0.05]
     res_long[,diff_spliced_relaxed:=abs(dt_median_psi)>0.05&sum(c(WILCOXON<0.05,TTEST<0.05,TNOM<0.05))>1,by='lsv_id']
     
   
   
+  return(res_long)
+}
+
+FormatVoilaDtPsi<-function(res_voila,case_name,control_name){
+  
+  #first, reformat the PSI columns (containing ';')
+  res_long<-FormatVoilaPSI(res_voila)
+  
+  #then, take care of harmonizing the dtpsi/HET specific column: 
+  cols_control=colnames(res_voila)[str_detect(colnames(res_voila),control_name)]
+  cols_case=colnames(res_voila)[str_detect(colnames(res_voila),case_name)]
+  #cols_groups<-c(cols_control,cols_case)
+  
+  
+  #generalized case and control columns
+  for(col in cols_control){
+    setnames(res_long,col,paste0(str_remove(col,paste0(control_name,'_')),'_control'))
+    
+  }
+  for(col in cols_case){
+    setnames(res_long,col,paste0(str_remove(col,paste0(case_name,'_')),'_case'))
+    
+  }
+  res_long[,case:=case_name]
+  res_long[,control:=control_name]
+  if('mean_dpsi_per_lsv_junction'%in%colnames(res_voila)){
+    res_long[,mean_dpsi_per_lsv_junction:=mean_psi_case-mean_psi_control]
+  }
   return(res_long)
 }
 
@@ -102,7 +114,7 @@ FormatVoilaPSI<-function(res_tsv){
   res_long<-merge(res_long,unique(res_tsv[,.SD,.SDcols=cols_ok]))
   
   #transform numerical columns 
-  cols_num<-colnames(res_long)[str_detect(colnames(res_long),'median|quantile|percentile|TNOM|TTEST|WILCOXON|psi')]
+  cols_num<-colnames(res_long)[str_detect(colnames(res_long),'mean|median|quantile|percentile|TNOM|TTEST|WILCOXON|psi|probability')]
   res_long[,(cols_num):=lapply(.SD,as.numeric),.SDcols=cols_num]
   return(res_long)
 }

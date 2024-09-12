@@ -330,10 +330,12 @@ CompGost<-function(res_enr,group.by,score='precision',col_max=1,
   
 }
 
+
 #HEATMAPS comparing DEGs of pathways
 CompDEGsPathways<-function(res_gsea,
                            res_de,
                            top.n=NULL,
+                           gene_col='gene_name',
                            FC_col='log2FoldChange',
                            pval_col='padj',
                            col_range=c(-2.5,2.5),
@@ -355,11 +357,12 @@ CompDEGsPathways<-function(res_gsea,
   
   
   #merge pathway by degs
+  res_de[,gene:=.SD,.SDcols = gene_col]
   res_de_p<-merge(res_de,degs_pathways,by='gene')
   res_de_p<-unique(res_de_p,by=c('gene','pathway'))
   #create heatmaps
   dep_mat<-data.frame(dcast(res_de_p,gene~pathway,value.var =FC_col),row.names = 'gene')
-  dep_mat[is.na(dep_mat)]<-0
+  #dep_mat[is.na(dep_mat)]<-0
   
   #add pvalue
   if(show_pval){
@@ -386,6 +389,7 @@ CompDEGsPathways<-function(res_gsea,
                    main='Top DEGs',
                    show_rownames = show_rownames,
                    display_numbers = dep_matp,
+                   cluster_rows = F,cluster_cols = F,na_col = 'black',
                    # cellwidth =20,
                    # cellheight =  8,
                    
@@ -396,7 +400,9 @@ CompDEGsPathways<-function(res_gsea,
                    color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
                                                                          "RdBu")))(length(col_breaks)-1),
                    fontsize= 7,
-                   main='Top DEGs',
+                   cluster_rows = F,cluster_cols = F,
+                   
+                   main='Top DEGs',na_col = 'black',
                    show_rownames = show_rownames,
                    # display_numbers = dep_matp,
                    # cellwidth =20,

@@ -48,27 +48,38 @@ ScaleDESeq2Covs<-function(mtd,covs){
 #       score : from which column of the res_de to collect the score/statistic to use to rank genes for fgsea?
 #outputs : res of fgsea in data table format
 #Notes : fgsea will be run by 'category' of the Msigdb (Canonical Pathways 'CP' and Gene ontoloy 'GO'  term by default) if  can specify 
-#duplicate_choice: how deal with duplicated gene_names / id/.  'random'ly pick one (default), or keep only the 'top' one based on the stat, or do 'nothing'. 
+#duplicate_choice: how deal with duplicated gene_names / id/. keep only the 'top' one based on the stat (default), 'random'ly pick one , or do 'nothing'. 
 RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
                          msigdb_path='/projectnb/tcwlab/MSigDB/all_CPandGOs_gene_and_genesets.csv.gz',
-                         genes_cols=c('gene','gene_name','gene_id'),
-                         duplicate_choice='random',
+                         gene_col=c('gene','gene_name','Symbol','hgnc_symbol','gene_id'),
+                         duplicate_choice='top',
+                         force_run=FALSE,
                          group.by=NULL,minSize = 10,maxSize = 2000,
                          gseaParam = 1,scoreType='std',eps=1e-50,
                          nPermSimple = 10000,...){
   require(data.table)
   require(fgsea)
+  require(stringr)
+  
+
   if(!'data.table'%in%class(res_de)){
-    if(!any(genes_cols%in%colnames(res_de))){
+    if(!any(gene_col%in%colnames(res_de))){
       res_de$gene<-rownames(res_de)
     }
     res_de<-data.table(res_de)
   }else{
     res_de<-copy(res_de)
   }
+  if(score=='score'){
+    score='stat'
+    setnames(res_de,'score','stat')
+  }
   
-  gene_col=which(colnames(res_de)%in%genes_cols)[1]
+  if(length(gene_col)>1){
+    gene_col=which(colnames(res_de)%in%gene_col)[1]
+  }
   res_de$gene<-res_de[[gene_col]]
+  
   
   if(!is.null(group.by)){
    
@@ -78,7 +89,13 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
       message('testing msigdb pathway enrichment in ',g)
       res_gsea<-RunFgseaMsigdb(res_de_list[[g]],score=score,
                                msigdb_path=msigdb_path,
-                               genes_cols=genes_cols)
+                               gene_col=gene_col,
+                               duplicate_choice=duplicate_choice,
+                               force_run=force_run,
+                               group.by=NULL,
+                               minSize = minSize,maxSize = maxSize,
+                               gseaParam = gseaParam,scoreType=scoreType,eps=eps,
+                               nPermSimple = nPermSimple,...)
       return(res_gsea[,query:=g])
       
     }))
@@ -92,16 +109,16 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
       res_de<-res_de[!to_rm]
       
     }
-    dups<-duplicated(res_de[order(-res_de[[score]])]$gene_name)
+    dups<-duplicated(res_de[order(-res_de[[score]])]$gene)
     
     if(sum(dups)>0){
-      if(sum(dups)>0.75*length(unique(res_de$gene_name))){
+      if(sum(dups)>0.75*length(unique(res_de$gene))&!force_run){
         stop('>75% of duplicated gene names, probably several non separated conditions.')
       }
       warning(sum(dups),' duplicated genes')
       if(duplicate_choice=='top'){
-        warning(' removing them by picking the top stat per gene')
-        res_de<-res_de[order(-res_de[[score]])][!(dups)]
+        warning(' removing them by picking the top abs(stat) per gene')
+        res_de<-res_de[order(-abs(res_de[[score]]))][!(dups)]
         
         
       }else if(duplicate_choice=='random'){
