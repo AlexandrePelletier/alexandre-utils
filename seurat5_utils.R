@@ -19,20 +19,24 @@ CalcSplicDef.Seurat<-function(obj,unspliced.assay='unspliced',
                               spliced.assay=NULL,
                               allcount.assay=NULL,
                               group.by='cell_type',
+                              min.cells=20,min.genes=50,
                               split.by=NULL,on.disk=NULL,
-                              bpcells_dir=NULL,
+                              bpcells_dir=NULL,force_bpcells=FALSE,
                               nThreads=1,
                               assay.name='splicingdef',
                               silent=FALSE,
                               ...){
   require(parallel)
+  require(BPCells)
   
   tot.cells<-ncol(obj)
+  
+  with_bp_cells<-tot.cells>200000
   
   if(is.null(on.disk))
     on.disk=FALSE
     
-  if(tot.cells>200000|on.disk==TRUE){
+  if(with_bp_cells|on.disk==TRUE){
     on.disk=TRUE
     if(is.null(bpcells_dir))stop('Save the splicing deficit matrix on disk, need the bpcells_dir parameter')
     
@@ -42,43 +46,150 @@ CalcSplicDef.Seurat<-function(obj,unspliced.assay='unspliced',
     
     }
   
-  
+  #if split
   if(!is.null(split.by)){
-    message('Splitting object per ',split.by)
+    message('Splitting data per ',split.by)
     
-    #Split object and calculate the score per splitted object before merge them
-    #1) Split
-    obj_list <- SplitObject(obj, split.by = split.by)
-    
-    obj_list=mclapply(obj_list,function(obj){
-      
-      
-      obj<-CalcSplicDef(obj,
-                        unspliced.assay=unspliced.assay,
-                        spliced.assay=spliced.assay,
-                        allcount.assay=allcount.assay,...)
-      if(on.disk){
-        ind=unique(as.vector(unlist(obj[[split.by]])))
-        write_matrix_dir(
-          mat = obj[[assay.name]]@data,
-          dir = file.path(bpcells_dir,ind,assay.name))
-        bpmat <- open_matrix_dir(dir =file.path(bpcells_dir,ind,assay.name))
-        obj[[assay.name]] <- CreateAssay5Object(data = bpmat)
+    if(on.disk){
+      #work with layers : split assays per layer according to the split.by arg if not already the case
+      if(!all(unique(unlist(obj[[split.by]]))%in%str_remove(Layers(obj[[unspliced.assay]],search='counts'),'counts\\.'))){
+        if(length(Layers(obj[[unspliced.assay]],search='counts'))>1)
+          obj[[unspliced.assay]]<-JoinLayers(obj[[unspliced.assay]])
+        
+        obj[[unspliced.assay]]<-split(obj[[unspliced.assay]],unlist(obj[[split.by]]))
+        
       }
+      
+      if(!is.null(spliced.assay)){
+        
+        if(!all(unique(unlist(obj[[split.by]]))%in%str_remove(Layers(obj[[unspliced.assay]],search='counts'),'counts\\.'))){
+          if(length(Layers(obj[[spliced.assay]],search='counts'))>1)
+            obj[[spliced.assay]]<-JoinLayers(obj[[spliced.assay]])
+          obj[[spliced.assay]]<-split(obj[[spliced.assay]],unlist(obj[[split.by]]))
+          
+        }
+      }
+     else{
+       if(!all(unique(unlist(obj[[split.by]]))%in%str_remove(Layers(obj[[allcount.assay]],search='counts'),'counts\\.'))){
+         if(length(Layers(obj[[allcount.assay]],search='counts'))>1)
+           obj[[allcount.assay]]<-JoinLayers(obj[[allcount.assay]])
+         obj[[allcount.assay]]<-split(obj[[allcount.assay]],unlist(obj[[split.by]]))
+         
+     }
+      
+     }
+      
+      #calculate the splicing def matrix for each layer, saved in BPCells dir
+      
+      splicdef_list<-sapply(unique(unlist(obj[[split.by]])), function(ind){
+        mat_dir=file.path(bpcells_dir,ind,assay.name)
+        
+        if(!file.exists(mat_dir)&!force_bpcells){
+          message('Extracting unspliced and spliced matrices for ', ind)
+          
+          #get dgCmatrices
+          count_layer=paste0('counts.',ind)
+          
+          
+          us= LayerData(obj[[unspliced.assay]],count_layer)|>as(Class = 'dgCMatrix')
+          
+          if(is.null(spliced.assay)){
+            s= LayerData(obj[[allcount.assay]],count_layer)|>as(Class = 'dgCMatrix')
+            
+          }else{
+            s= LayerData(obj[[spliced.assay]],count_layer)|>as(Class = 'dgCMatrix')
+            
+          }
+          
+          #order,names and harmonize the matrices
+          comm_genes=intersect(rownames(us),rownames(s))
+          us=us[comm_genes,]
+          s=s[comm_genes,]
+          message('dimension of the unspliced matrix: ',paste(dim(us),collapse = 'x'))
+          message('dimension of the spliced matrix: ',paste(dim(s),collapse = 'x'))
+          if(any(dim(s)!=dim(us)))stop('different dimensions of the 2 matrices')
+          #calc splic def
+          message('Calculating splicing deficit..')
+          
+          if(is.null(spliced.assay)){
+            splicingdef=CalcSplicDef(obj=us,all=s,...)
+            
+          }else{
+            splicingdef=CalcSplicDef(obj=us,spliced=s,...)
+            
+          }
+          
+          message('saving Splicing deficit matrix in BPCells dir format..')
+          
+          
+          if(dir.exists(mat_dir)){
+            system(paste('rm -rf',mat_dir))
+          }
+          
+          write_matrix_dir(
+            mat =splicingdef,
+            dir = mat_dir)
+          message('done.')
+          
+          
+        }
+        
+        splicingdef <- open_matrix_dir(dir =mat_dir)
+        
+        
+        return(splicingdef)
+        
+      })
+      
+      #create the new assay
+      message('Creating ',assay.name,' Assay')
+      
+      obj[[assay.name]] <- CreateAssay5Object(data = splicdef_list)
+      
+    }else{
+      #Work with SeuratV3 splitting the object instead of creating layer
+      #1) Split
+      obj_list <- SplitObject(obj, split.by = split.by)
+      inds=names(obj_list)
+      obj_list=mclapply(obj_list,function(obj){
+        ind=unique(as.vector(unlist(obj[[split.by]])))
+        i=which(inds==ind)
+        
+        message('calculating splcing def for ',ind,' (',i,'/',length(inds),')')
+        
+        obj<-CalcSplicDef(obj,
+                          unspliced.assay=unspliced.assay,
+                          spliced.assay=spliced.assay,
+                          allcount.assay=allcount.assay,
+                          group.by=group.by,
+                          split.by=NULL,on.disk=NULL,
+                          ...)
+        if(on.disk){
+          mat_dir=file.path(bpcells_dir,ind,assay.name)
+          if(dir.exists(mat_dir)){
+            system(paste('rm -rf',mat_dir))
+          }
+          write_matrix_dir(
+            mat = obj[[assay.name]]@data,
+            dir = mat_dir)
+          bpmat <- open_matrix_dir(dir =mat_dir)
+          obj[[assay.name]] <- CreateAssay5Object(data = bpmat)
+        }
+        return(obj)
+        
+      },mc.cores=nThreads)
+      
+      #2) merge 
+      message('merging the splitted objects')
+      
+      obj=merge(obj_list[[1]],obj_list[2:length(obj_list)])
+      
       return(obj)
-      
-    },mc.cores=nThreads)
+    }
     
-    #2) merge 
-    message('merging the splitted objects')
-      
-    obj=merge(obj_list[[1]],obj_list[2:length(obj_list)])
-      
-    return(obj)
     
   }else{
     #transform to Assay V3 object if not
-    
     if('Assay5'%in%class(obj[[unspliced.assay]])){
       message('Assay 5 detected for unspliced assay, convert to Assay V3')
       
@@ -117,7 +228,6 @@ CalcSplicDef.Seurat<-function(obj,unspliced.assay='unspliced',
       
     }
     
-    
     #order,names and harmonize the matrices
     comm_genes=intersect(rownames(us),rownames(s))
     us=us[comm_genes,]
@@ -134,30 +244,53 @@ CalcSplicDef.Seurat<-function(obj,unspliced.assay='unspliced',
       
     }
     #add as assay
+    message('Creating ',assay.name,' Assay')
     obj[[assay.name]]<-CreateAssayObject(data=splicingdef)
     
-    #splicing defect per cell optimized by celltype 
-    #- only celltype expressed-genes in >50% cells
-    
-    message('Calculating splicing deficit score')
+  }
+  
+  #Finally, calc the splicing defect per cell group by cluster
+  #- only cluster expressed-genes in >50% cells
+  
+  message('Calculating splicing deficit score')
+  
+  for(l in Layers(obj[[assay.name]],search ='data')){
+    ind=str_remove(l,'data\\.')
+    message('for ',ind)
+    splicingdef=LayerData(obj[[assay.name]],l)|>as(Class = 'dgCMatrix')
     genes<-rownames(splicingdef)
+    
+    spliced=LayerData(obj[[ifelse(is.null(spliced.assay),allcount.assay,spliced.assay)]],str_replace(l,'data','counts'))|>as(Class = 'dgCMatrix')
     
     for(ct in unlist(unique(obj[[group.by]]))){
       if(!silent)message(ct,'...\n')
-      cells<-colnames(obj)[obj[[group.by]]==ct]
-      
-      is.expr<-rowSums(s[genes,cells]>0)>0.5*length(cells)
-      
-      if(!silent)message(sum(is.expr),' genes are expressed (>50%)')
-      
-      genes_expr<-genes[is.expr]
-      obj@meta.data[cells,'avg.splic_group']<-apply(splicingdef[genes_expr,cells],2,function(x)mean(x[x!=Inf],na.rm=T))
-      obj@meta.data[cells,'med.splic_group']<-apply(splicingdef[genes_expr,cells],2,function(x)median(x[x!=Inf],na.rm=T))
-      
+      cells<-intersect(colnames(splicingdef),colnames(obj)[unlist(obj[[group.by]]==ct)])
+      message(length(cells),' cells')
+      if(length(cells)>=min.cells){
+        
+        is.expr<-rowSums(spliced[genes,cells]>0)>0.5*length(cells)
+        
+        if(!silent)message(sum(is.expr),' genes are expressed (>50%)')
+        
+        genes_expr<-genes[is.expr]
+        if(length(genes_expr)>=min.genes){
+          obj@meta.data[cells,'avg.splicdef_group']<-apply(splicingdef[genes_expr,cells],2,function(x)mean(x[x!=Inf],na.rm=T))
+          obj@meta.data[cells,'med.splicdef_group']<-apply(splicingdef[genes_expr,cells],2,function(x)median(x[x!=Inf],na.rm=T))
+          
+        }else{
+          message('not passing min.genes threshold, returning NA for splicdef score')
+          
+        }
+        
+      }else{
+        message('not passing min.cells threshold, returning NA for splicdef score')
+        
+      }
     }
-    return(obj)
+    
   }
-  
+ 
+  return(obj)
 }
 
 #CalcSplicDef.matrix

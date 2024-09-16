@@ -21,6 +21,24 @@ ps<-function(...,sep="",collapse = NULL)paste(...,sep=sep,collapse = collapse)
 source<-function(file,chdir=TRUE)base::source(file,chdir = chdir)
 
 qs<-function()system('qstat -u adpelle1')
+
+
+#detach_package
+detach_package <- function(pkg, character.only = FALSE)
+{
+  if(!character.only)
+  {
+    pkg <- deparse(substitute(pkg))
+  }
+  search_item <- paste("package", pkg, sep = ":")
+  while(search_item %in% search())
+  {
+    detach(search_item, unload = TRUE, character.only = TRUE)
+  }
+}
+#usage: detach_package(vegan)
+#or detach_package("vegan", TRUE)
+
 # Stats Related Functions ####
 #CategoricalsToDummy
 #inputs: covariates in data.table format
