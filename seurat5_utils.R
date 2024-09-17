@@ -18,12 +18,14 @@ CalcSplicDef <- function(obj, ...) {
 CalcSplicDef.Seurat<-function(obj,unspliced.assay='unspliced',
                               spliced.assay=NULL,
                               allcount.assay=NULL,
+                              features=NULL,
                               group.by='cell_type',
                               min.cells=20,min.genes=50,
                               split.by=NULL,on.disk=NULL,
                               bpcells_dir=NULL,force_bpcells=FALSE,
                               nThreads=1,
                               assay.name='splicingdef',
+                              score.suffix=NULL,
                               silent=FALSE,
                               ...){
   require(parallel)
@@ -259,7 +261,10 @@ CalcSplicDef.Seurat<-function(obj,unspliced.assay='unspliced',
     message('for ',ind)
     splicingdef=LayerData(obj[[assay.name]],l)|>as(Class = 'dgCMatrix')
     genes<-rownames(splicingdef)
-    
+    if(!is.null(features)){
+      
+      genes<-intersect(genes,features)
+    }
     spliced=LayerData(obj[[ifelse(is.null(spliced.assay),allcount.assay,spliced.assay)]],str_replace(l,'data','counts'))|>as(Class = 'dgCMatrix')
     
     for(ct in unlist(unique(obj[[group.by]]))){
@@ -274,9 +279,9 @@ CalcSplicDef.Seurat<-function(obj,unspliced.assay='unspliced',
         
         genes_expr<-genes[is.expr]
         if(length(genes_expr)>=min.genes){
-          obj@meta.data[cells,'avg.splicdef_group']<-apply(splicingdef[genes_expr,cells],2,function(x)mean(x[x!=Inf],na.rm=T))
-          obj@meta.data[cells,'med.splicdef_group']<-apply(splicingdef[genes_expr,cells],2,function(x)median(x[x!=Inf],na.rm=T))
-          
+          obj@meta.data[cells,paste('avg.splicdef',group.by,score.suffix,sep='_')]<-apply(splicingdef[genes_expr,cells],2,function(x)mean(x[x!=Inf],na.rm=T))
+          obj@meta.data[cells,paste('med.splicdef',group.by,score.suffix,sep='_')]<-apply(splicingdef[genes_expr,cells],2,function(x)median(x[x!=Inf],na.rm=T))
+
         }else{
           message('not passing min.genes threshold, returning NA for splicdef score')
           

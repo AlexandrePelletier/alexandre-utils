@@ -70,7 +70,7 @@ get_igraph <- function(res_fgsea, simmat,leading_edge_list,
   
   # Use similarity as the weight(length) of an edge
   E(g)$weight <- wd[, 3]
-  g <- delete.edges(g, E(g)[wd[, 3] < min_edge])
+  g <- igraph::delete.edges(g, E(g)[wd[, 3] < min_edge])
   
   res_fgseaf<-res_fgsea[V(g)$name,on='pathway']
   #idx <- unlist(sapply(V(g)$name, function(x) which(x == res_fgseaf$pathway)))
