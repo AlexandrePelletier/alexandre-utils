@@ -372,7 +372,8 @@ OR<-function(set1,set2,size_universe){
 
 
 
-OR2<-function(querys,terms_list,size_universe,min.term.size=0,max.term.size=Inf,overlap_column=TRUE,verbose=FALSE){
+OR2<-function(querys,terms_list,size_universe,min.term.size=0,max.term.size=Inf,
+              overlap_column=TRUE,verbose=TRUE){
   if(is.list(querys)){
     return(Reduce(rbind,lapply(names(querys),
                                function(q)OR2(querys = querys[[q]],
@@ -546,6 +547,97 @@ FindGO_ID<-function(term_descriptions){
 start<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_")[[1]][2]))
 end<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_")[[1]][3]))
 seqid<-function(x)sapply(x,function(x)strsplit(x,"-|:|_")[[1]][1])
+
+pos<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_")[[1]][2]))
+ref<-function(x)sapply(x,function(x)strsplit(x,"-|:|_")[[1]][3])
+alt<-function(x)sapply(x,function(x)strsplit(x,"-|:|_")[[1]][4])
+
+
+#FlipGeno
+#flip e.g. 0/1 in 1/0 in a vector. works also with the separator '|'
+#warning: - if contain genoytpe metadata info (eg. 0|1:0,0.999,0.001:1.001:0.001,1) will removed it (return only 1|0)
+#         - do not support non-biallelic allele
+FlipGeno<-function(x){
+  require(stringr)
+  sapply(x, function(y){
+    sep=str_extract(y,'[/|]')
+    
+    geno_vec<-strsplit(y,':')[[1]][1]|>strsplit(paste0("\\",sep))|>unlist()|>as.numeric()
+    geno_vec<-ifelse(geno_vec==0,1,ifelse(geno_vec==1,0,NA))
+    return(paste(geno_vec,collapse  = sep))
+  })
+}
+
+
+#AlleleFlipping
+#flip alleles of vcf-like table (modifying `ID` (optional), `REF`, `ALT` and `$genotype` columns) according to a reference of variants with the format #CHROM:POS:REF:ALT
+#arguments:
+#vcf: the vcf-like table in data.table::data.table() format 
+#ref_snps: the SNPs to be flipped accordingly
+#genotype_columns=names of the genotypes columns.
+#edit_ID: if need to edit the SNPs IDs, default TRUE
+#all.x= if need to return the full vcf, even SNPs not found in the reference. default FALSE
+
+#Note: if contain genotype metadata info (eg. 0|1:0,0.999,0.001:1.001:0.001,1) will removed it (return only 1|0)
+#Value: Return a data.table of the vcf like table reformatted according to the SNPs reference
+AlleleFlipping<-function(vcf,ref_snps,genotype_columns='genotype',edit_ID=TRUE,all.x=FALSE,verbose=FALSE){
+  require(data.table)
+  if(!'data.table'%in%class(vcf)){
+    message('converting to data.table')
+    vcf<-data.table(vcf)
+  }
+  
+  ref_snps<-unique(as.vector(unlist(ref_snps)))
+  
+  
+  seqid<-function(x)sapply(x,function(x)strsplit(x,"-|:|_")[[1]][1])
+  pos<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_")[[1]][2]))
+  ref<-function(x)sapply(x,function(x)strsplit(x,"-|:|_")[[1]][3])
+  alt<-function(x)sapply(x,function(x)strsplit(x,"-|:|_")[[1]][4])
+  
+  vcf_flipped<-rbindlist(lapply(ref_snps,function(snp){
+    
+    chr=seqid(snp)
+    chr=c(str_remove(chr,'chr'),paste0('chr',str_remove(chr,'chr')))
+    p=pos(snp)
+    r=ref(snp)
+    a=alt(snp)
+    
+    vcff=vcf[`#CHROM`%in%chr&POS==p]
+    
+    
+    if(all(vcff[,REF==r&ALT==a])){
+      vcff[,flipped_allele:=F]
+      
+    }else if (all(vcff[,REF==a&ALT==r])){
+      if(verbose)message('flipping ', snp)
+      vcff[,flipped_allele:=T]
+      vcff[,REF:=r]
+      vcff[,ALT:=a]
+      
+      if(edit_ID&all(vcff[,ID!=snp])){
+        vcff[,ID:=snp]
+      }
+      
+      vcff[,(genotype_columns):=lapply(.SD,function(x)as.vector(FlipGeno(x))),.SDcols=genotype_columns]
+      
+    }else{
+      vcff[,flipped_allele:=NA]
+      message(snp, ' not found, returning NA')    
+      
+    }
+    
+    
+  }))
+  
+  if(all.x){
+    tested<-vcf[unique(vcf_flipped[,.(`#CHROM`,POS))]]$ID
+    vcf_flipped<-rbind(vcf_flipped,vcf[!ID%in%tested],fill=T)
+  }
+  
+  return(vcf_flipped)
+}
+
 
 
 MethChangeReg<-function(res_meth,region){

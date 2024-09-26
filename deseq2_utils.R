@@ -148,7 +148,7 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
     }))
     
     #annot 
-    res_fgsea<-merge(res_fgsea,unique(msigdb[,-'gene']))[order(padj)]
+    res_fgsea<-merge(res_fgsea,unique(msigdb[,-'gene']))[order(pval)]
     
   }
   
