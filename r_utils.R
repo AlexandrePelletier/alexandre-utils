@@ -496,9 +496,8 @@ LiftOver<-function(bed,chainfile,
   
   fwrite(bed,in_file,col.names = F,sep="\t")
   
-  system(paste("CrossMap.py bed",chainfile,in_file,out_file))
+  system(paste("micromamba run -n utils CrossMap bed",chainfile,in_file,out_file))
   
- 
   bed_trans<-fread(out_file,select = select,col.names = col.names)
   file.remove(c(in_file,out_file))
   
@@ -507,14 +506,14 @@ LiftOver<-function(bed,chainfile,
 
 hg19to38<-function(bed){
   chainfile="/projectnb/tcwlab/RefData/liftover/hg19ToHg38.over.chain.gz"
-  bed_trans<-LiftOver(bed,chainfile =chainfile ,col.names=c('chr','start.hg19','end.hg19','id'),
+  bed_trans<-LiftOver(bed,chainfile =chainfile ,col.names=c('chr','start.hg38','end.hg38','id'),
 )
   return(bed_trans)
 }
 
 hg38to19<-function(bed){
   chainfile="/projectnb/tcwlab/RefData/liftover/hg38ToHg19.over.chain.gz"
-  bed_trans<-LiftOver(bed,chainfile =chainfile,col.names=c('chr','start.hg38','end.hg38','id'))
+  bed_trans<-LiftOver(bed,chainfile =chainfile,col.names=c('chr','start.hg19','end.hg19','id'))
   return(bed_trans)
 }
 
@@ -544,13 +543,22 @@ FindGO_ID<-function(term_descriptions){
 
 
 #genomics coordinates manipulation ####
-start<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_")[[1]][2]))
-end<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_")[[1]][3]))
-seqid<-function(x)sapply(x,function(x)strsplit(x,"-|:|_")[[1]][1])
+start<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_|,|\\[|\\]")[[1]][2]))
+end<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_|,|\\[|\\]")[[1]][3]))
+seqid<-function(x)sapply(x,function(x)strsplit(x,"-|:|_|,|\\[|\\]")[[1]][1])
 
-pos<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_")[[1]][2]))
-ref<-function(x)sapply(x,function(x)strsplit(x,"-|:|_")[[1]][3])
-alt<-function(x)sapply(x,function(x)strsplit(x,"-|:|_")[[1]][4])
+pos<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_|,|\\[|\\]")[[1]][2]))
+
+
+ref<-function(x)sapply(x,function(x){
+  vec=strsplit(x,"-|:|_|,|\\[|\\]")[[1]]
+  return(vec[length(vec)-1])
+})
+
+alt<-function(x)sapply(x,function(x){
+  vec=strsplit(x,"-|:|_|,|\\[|\\]")[[1]]
+  return(vec[length(vec)])
+})
 
 
 #FlipGeno
@@ -578,28 +586,38 @@ FlipGeno<-function(x){
 #edit_ID: if need to edit the SNPs IDs, default TRUE
 #all.x= if need to return the full vcf, even SNPs not found in the reference. default FALSE
 
-#Note: if contain genotype metadata info (eg. 0|1:0,0.999,0.001:1.001:0.001,1) will removed it (return only 1|0)
+#Note: make sure chromosome ID have been formated the same way (e.g. both with the suffixe 'chr')
+#Note2: if contain genotype metadata info (eg. 0|1:0,0.999,0.001:1.001:0.001,1) will removed it (return only 1|0)
 #Value: Return a data.table of the vcf like table reformatted according to the SNPs reference
-AlleleFlipping<-function(vcf,ref_snps,genotype_columns='genotype',edit_ID=TRUE,all.x=FALSE,verbose=FALSE){
+AlleleFlipping<-function(vcf,ref_snps,genotype_columns='genotype',edit_ID=TRUE,
+                         all.x=FALSE,verbose=TRUE,nThreads=NULL){
   require(data.table)
+  require(parallel)
+  
   if(!'data.table'%in%class(vcf)){
     message('converting to data.table')
     vcf<-data.table(vcf)
   }
+  vcf[,`#CHROM`:=as.character(`#CHROM`)]
   
+  
+  if(is.null(nThreads))nThreads=1
   ref_snps<-unique(as.vector(unlist(ref_snps)))
+  #filter for SNPs pos present in the vcf
   
+  ref_snps_list<-strsplit(ref_snps,"-|:|_|,|\\[|\\]")
   
-  seqid<-function(x)sapply(x,function(x)strsplit(x,"-|:|_")[[1]][1])
-  pos<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_")[[1]][2]))
-  ref<-function(x)sapply(x,function(x)strsplit(x,"-|:|_")[[1]][3])
-  alt<-function(x)sapply(x,function(x)strsplit(x,"-|:|_")[[1]][4])
+  ref_snps<-data.table(`#CHROM`=sapply(ref_snps_list,function(x)x[1]),
+                       POS=sapply(ref_snps_list,function(x)as.numeric(x[2])),
+                       ID=ref_snps)
   
-  vcf_flipped<-rbindlist(lapply(ref_snps,function(snp){
+  ref_snpsf<-merge(ref_snps,unique(vcf[,.(`#CHROM`,POS)]),by=c('#CHROM','POS'))
+  message(nrow(ref_snpsf),' ref SNPs found in the vcf (',round(nrow(ref_snpsf)/nrow(ref_snps)*100,digits = 1),'% of them)')
+  
+  vcf_flipped<-rbindlist(mclapply(ref_snpsf$ID,function(snp){
     
-    chr=seqid(snp)
-    chr=c(str_remove(chr,'chr'),paste0('chr',str_remove(chr,'chr')))
-    p=pos(snp)
+    chr=ref_snpsf[ID==snp]$`#CHROM`
+    p=ref_snpsf[ID==snp]$POS
     r=ref(snp)
     a=alt(snp)
     
@@ -628,10 +646,10 @@ AlleleFlipping<-function(vcf,ref_snps,genotype_columns='genotype',edit_ID=TRUE,a
     }
     
     
-  }))
+  },mc.cores=nThreads))
   
   if(all.x){
-    tested<-vcf[unique(vcf_flipped[,.(`#CHROM`,POS))]]$ID
+    tested<-vcf[unique(vcf_flipped[,.(`#CHROM`,POS)]),on=c('#CHROM','POS')]$ID
     vcf_flipped<-rbind(vcf_flipped,vcf[!ID%in%tested],fill=T)
   }
   
@@ -1325,7 +1343,7 @@ RunGatk<-function(cmd){
 #outputs : vcf file (compressed with bgzipped if bgzip=T), at the same location than the bed file
 #note : return in R the path to the new vcf file. 
 #if dry_run=TRUE, do not execute the code but raterh return the codes in addition to the path to the future vcf (in a list format where $cmds contain the commands, and $vcf contain the path to the vcf)
-TransToVCF<-function(bed_file,bgzip=T,dry_run=FALSE,threads=NULL){
+TransToVCF<-function(bed_file,bgzip=T,dry_run=FALSE,threads=8){
   file_pref<-tools::file_path_sans_ext(bed_file)
   vcf_file=paste0(file_pref,'.vcf')  
   vcfgz_file=paste0(vcf_file,'.gz')
@@ -1333,7 +1351,7 @@ TransToVCF<-function(bed_file,bgzip=T,dry_run=FALSE,threads=NULL){
   
   tovcf<-paste('plink',
                '--bfile',file_pref,
-               ifelse(!is.null(threads),paste('--threads',threads),NULL),
+               paste('--threads',threads),
                '--recode vcf',
                '--out',file_pref)
   zip=paste('bgzip -f',vcf_file)
