@@ -569,10 +569,17 @@ FlipGeno<-function(x){
   require(stringr)
   sapply(x, function(y){
     sep=str_extract(y,'[/|]')
+    info_vec=strsplit(y,':')[[1]]
+    geno_vec<-info_vec[1]|>strsplit(paste0("\\",sep))|>unlist()
+    geno_vec<-ifelse(geno_vec=='0','1',ifelse(geno_vec=='1','0',geno_vec))
     
-    geno_vec<-strsplit(y,':')[[1]][1]|>strsplit(paste0("\\",sep))|>unlist()|>as.numeric()
-    geno_vec<-ifelse(geno_vec==0,1,ifelse(geno_vec==1,0,NA))
-    return(paste(geno_vec,collapse  = sep))
+    if(length(info_vec)>1){
+      geno_info=paste(paste(geno_vec,collapse  = sep),paste(info_vec[-1],collapse = ':'),sep=':')
+    }else{
+      geno_info=paste(geno_vec,collapse  = sep)
+    }
+    
+    return(geno_info)
   })
 }
 
@@ -590,7 +597,7 @@ FlipGeno<-function(x){
 #Note2: if contain genotype metadata info (eg. 0|1:0,0.999,0.001:1.001:0.001,1) will removed it (return only 1|0)
 #Value: Return a data.table of the vcf like table reformatted according to the SNPs reference
 AlleleFlipping<-function(vcf,ref_snps,genotype_columns='genotype',edit_ID=TRUE,
-                         all.x=FALSE,verbose=TRUE,nThreads=NULL){
+                         all.x=FALSE,verbose=NULL,nThreads=NULL){
   require(data.table)
   require(parallel)
   
@@ -612,49 +619,72 @@ AlleleFlipping<-function(vcf,ref_snps,genotype_columns='genotype',edit_ID=TRUE,
                        ID=ref_snps)
   
   ref_snpsf<-merge(ref_snps,unique(vcf[,.(`#CHROM`,POS)]),by=c('#CHROM','POS'))
-  message(nrow(ref_snpsf),' ref SNPs found in the vcf (',round(nrow(ref_snpsf)/nrow(ref_snps)*100,digits = 1),'% of them)')
+  message(nrow(ref_snpsf),' ref SNPs found in the vcf (',round(nrow(ref_snpsf)/nrow(ref_snps)*100,digits = 1),'% of the refs, ',
+          round(nrow(ref_snpsf)/nrow(vcf)*100,digits = 1),'% of the vcf)')
   
-  vcf_flipped<-rbindlist(mclapply(ref_snpsf$ID,function(snp){
+  ref_snpsf[,REF:=ref(ID)]
+  ref_snpsf[,ALT:=alt(ID)]
+  
+  ref_snps_matching<-merge(ref_snpsf,
+                           unique(vcf[,.(`#CHROM`,POS,REF,ALT)]),by=c('#CHROM','POS','REF','ALT'))
+  
+  vcf2<-vcf[ref_snps_matching[,.(`#CHROM`,POS,REF,ALT)],on=c('#CHROM','POS','REF','ALT')]
+  
+  vcf2[,flipped_allele:=F]
+  
+  ref_snpsf_toflip<-ref_snpsf[!ID%in%ref_snps_matching$ID]
+  
+  message(nrow(ref_snps_matching),' SNPs matching alleles, try flipping for ',nrow(ref_snpsf_toflip),' variants')
+  
+  if(nrow(ref_snpsf_toflip)>0){
+    if(nrow(ref_snpsf_toflip)>1000&is.null(verbose))verbose=FALSE
+    else verbose=TRUE
     
-    chr=ref_snpsf[ID==snp]$`#CHROM`
-    p=ref_snpsf[ID==snp]$POS
-    r=ref(snp)
-    a=alt(snp)
-    
-    vcff=vcf[`#CHROM`%in%chr&POS==p]
-    
-    
-    if(all(vcff[,REF==r&ALT==a])){
-      vcff[,flipped_allele:=F]
+    vcf_flipped<-rbindlist(mclapply(ref_snpsf_toflip$ID,function(snp){
       
-    }else if (all(vcff[,REF==a&ALT==r])){
-      if(verbose)message('flipping ', snp)
-      vcff[,flipped_allele:=T]
-      vcff[,REF:=r]
-      vcff[,ALT:=a]
+      chr=ref_snpsf[ID==snp]$`#CHROM`
+      p=ref_snpsf[ID==snp]$POS
+      r=ref(snp)
+      a=alt(snp)
       
-      if(edit_ID&all(vcff[,ID!=snp])){
-        vcff[,ID:=snp]
+      vcff=vcf[`#CHROM`%in%chr&POS==p]
+      
+      if (all(vcff[,REF==a&ALT==r])){
+        if(verbose)message('flipping ', snp)
+        vcff[,flipped_allele:=T]
+        vcff[,REF:=r]
+        vcff[,ALT:=a]
+        
+        if(edit_ID&all(vcff[,ID!=snp])){
+          vcff[,ID:=snp]
+        }
+        
+        vcff[,(genotype_columns):=lapply(.SD,function(x)as.vector(FlipGeno(x))),.SDcols=genotype_columns]
+        
+      }else{
+        vcff[,flipped_allele:=NA]
+        message(snp, ' uncorrect alt/ref, returning NA (query = ',unique(vcff$REF),'/',unique(vcff$ALT),')')    
+        
       }
       
-      vcff[,(genotype_columns):=lapply(.SD,function(x)as.vector(FlipGeno(x))),.SDcols=genotype_columns]
+      return(vcff)
       
-    }else{
-      vcff[,flipped_allele:=NA]
-      message(snp, ' not found, returning NA')    
-      
-    }
+    },mc.cores=nThreads))
     
+    message(nrow(vcf_flipped),'/',  nrow(vcf),' alleles flipped')
     
-  },mc.cores=nThreads))
-  
-  if(all.x){
-    tested<-vcf[unique(vcf_flipped[,.(`#CHROM`,POS)]),on=c('#CHROM','POS')]$ID
-    vcf_flipped<-rbind(vcf_flipped,vcf[!ID%in%tested],fill=T)
+    vcf2<-rbind(vcf_flipped,vcf2)
   }
   
-  return(vcf_flipped)
+  if(all.x){
+    tested<-vcf[unique(vcf2[,.(`#CHROM`,POS)]),on=c('#CHROM','POS')]$ID
+    vcf2<-rbind(vcf2,vcf[!ID%in%tested],fill=T)
+    #reorder
+  }
+
+  return(vcf2[order(`#CHROM`,POS)])
 }
+
 
 
 
@@ -1474,17 +1504,25 @@ GetSNPsInfos<-function(rsids,snp_db='/projectnb/tcwlab/RefData/SNPs/snp141.txt.g
 }
 
 #Interaction with bash####
-#bgzip : compressed in bed.gz like table
+#bgzip
+#compressed in bed.gz like table
 #input: x: data.table with 1: chr, 2: start, 3: end
-#file=  bed.gz filename
-#output; bed.gz file compressed with bgzip and .bed.tbi
-bgzip<-function(x,bgz_file,sort_coord=FALSE,header=TRUE){
+#bgz_file=  bed.gz filename
+#output; bed.gz file compressed with bgzip and indexed with tabix
+bgzip<-function(x,bgz_file,sort_coord=FALSE,col.names=TRUE,add_header_of=NULL){
   require('data.table')
   bed_file<-tools::file_path_sans_ext(bgz_file)
   if(sort_coord)
     setorderv(x,cols = colnames(x)[1:2],order = 1)
   
-  fwrite(x,bed_file,sep='\t',col.names = header)
+  if(!is.null(add_header_of)){
+    append=TRUE
+    col.names=FALSE
+    #extract header from vcf file
+    cmd=paste('bcftools head', add_header_of,'>',bed_file)
+    system(cmd)
+  }
+  fwrite(x,bed_file,sep='\t',col.names = col.names,append = append)
   system(paste('bgzip -f',bed_file))
   system(paste('tabix',bgz_file))
   system(paste('rm -f',bed_file))
