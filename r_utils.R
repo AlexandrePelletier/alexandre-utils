@@ -563,8 +563,7 @@ alt<-function(x)sapply(x,function(x){
 
 #FlipGeno
 #flip e.g. 0/1 in 1/0 in a vector. works also with the separator '|'
-#warning: - if contain genoytpe metadata info (eg. 0|1:0,0.999,0.001:1.001:0.001,1) will removed it (return only 1|0)
-#         - do not support non-biallelic allele
+#warning: do not support non-biallelic allele
 FlipGeno<-function(x){
   require(stringr)
   sapply(x, function(y){
@@ -594,7 +593,6 @@ FlipGeno<-function(x){
 #all.x= if need to return the full vcf, even SNPs not found in the reference. default FALSE
 
 #Note: make sure chromosome ID have been formated the same way (e.g. both with the suffixe 'chr')
-#Note2: if contain genotype metadata info (eg. 0|1:0,0.999,0.001:1.001:0.001,1) will removed it (return only 1|0)
 #Value: Return a data.table of the vcf like table reformatted according to the SNPs reference
 AlleleFlipping<-function(vcf,ref_snps,genotype_columns='genotype',edit_ID=TRUE,
                          all.x=FALSE,verbose=NULL,nThreads=NULL){
