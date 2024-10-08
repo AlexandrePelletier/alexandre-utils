@@ -627,14 +627,24 @@ AlleleFlipping<-function(vcf,ref_snps,genotype_columns='genotype',edit_ID=TRUE,
                            unique(vcf[,.(`#CHROM`,POS,REF,ALT)]),by=c('#CHROM','POS','REF','ALT'))
   
   vcf2<-vcf[ref_snps_matching[,.(`#CHROM`,POS,REF,ALT)],on=c('#CHROM','POS','REF','ALT')]
-  
+ 
   vcf2[,flipped_allele:=F]
+  
+  if(edit_ID){
+    #rename ID for matching variants
+    message('renaming IDs for matching variants based on reference')
+    cols_order=colnames(vcf2)
+    vcf2<-merge(vcf2[,-'ID'],ref_snps_matching[,.(`#CHROM`,POS,REF,ALT,ID)],by=c('#CHROM','POS','REF','ALT'))
+    setcolorder(vcf2,cols_order)
+  }
   
   ref_snpsf_toflip<-ref_snpsf[!ID%in%ref_snps_matching$ID]
   
-  message(nrow(ref_snps_matching),' SNPs matching alleles, try flipping for ',nrow(ref_snpsf_toflip),' variants')
+  message(nrow(ref_snps_matching),' SNPs matching alleles.')
   
   if(nrow(ref_snpsf_toflip)>0){
+    message('try flipping for ',nrow(ref_snpsf_toflip),' variants')
+    
     if(nrow(ref_snpsf_toflip)>1000&is.null(verbose))verbose=FALSE
     else verbose=TRUE
     
@@ -677,7 +687,9 @@ AlleleFlipping<-function(vcf,ref_snps,genotype_columns='genotype',edit_ID=TRUE,
   if(all.x){
     tested<-vcf[unique(vcf2[,.(`#CHROM`,POS)]),on=c('#CHROM','POS')]$ID
     vcf2<-rbind(vcf2,vcf[!ID%in%tested],fill=T)
-    #reorder
+    #reorder cols
+    first_cols=c('#CHROM','POS',"ID","REF","ALT")
+    setcolorder(vcf2,c(first_cols,setdiff(colnames(vcf2),first_cols)))
   }
 
   return(vcf2[order(`#CHROM`,POS)])
