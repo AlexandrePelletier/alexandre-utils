@@ -68,7 +68,7 @@ FormatVoilaDtPsi<-function(res_voila,case_name,control_name){
   
   #then, take care of harmonizing the dtpsi/HET specific column: 
   cols_control=colnames(res_voila)[str_detect(colnames(res_voila),control_name)]
-  cols_case=colnames(res_voila)[str_detect(colnames(res_voila),case_name)]
+  cols_case=colnames(res_voila)[str_detect(colnames(res_voila),case_name)&!str_detect(colnames(res_voila),control_name)]
   #cols_groups<-c(cols_control,cols_case)
   
   
