@@ -993,6 +993,7 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   message('5 first commands:')
   cat( head(cmds,5),sep = '\n')
   
+  return(invisible(file_path))
 }
 
 
@@ -1168,14 +1169,20 @@ CreateJobForRfile<-function(r_file,args=NULL,
   
 }
 
-RunQsub<-function(qsub_file,job_name,proj_name=NULL,wait_for=NULL,dryrun=FALSE){
+RunQsub<-function(qsub_file=.Last.value,job_name=NULL,proj_name=NULL,wait_for=NULL,dryrun=FALSE){
+
   if(!str_detect(qsub_file,'.qsub$'))qsub_file=paste0(tools::file_path_sans_ext(qsub_file),'.qsub')
   
-  if(!file.exists(qsub_file))stop(qsub_file,' do not exist')
+  if(!file.exists(qsub_file))stop(qsub_file,' does not exist')
   
+  if(is.null(job_name)){
+    job_name<-str_sub(str_remove(basename(qsub_file),'[0-9A-Za-z]+-'),end = 15)
+  }
+  message('running job file ', qsub_file,' with name ', job_name)
+
   if(is.null(wait_for)){
     cmd<-paste('qsub','-N',job_name,qsub_file,proj_name)
- 
+
   }else{
     cmd<-paste('qsub',
                '-N',job_name,
@@ -1185,7 +1192,7 @@ RunQsub<-function(qsub_file,job_name,proj_name=NULL,wait_for=NULL,dryrun=FALSE){
   if(!dryrun){
     message<-system(cmd,intern = TRUE)
     message(paste(message,collapse = '\n'))
-    
+
     jobid<-ifelse(str_detect(message,'has been submitted'),str_extract(message,'[0-9]+'),NA)
     return(jobid[!is.na(jobid)])
   }else{
