@@ -733,23 +733,7 @@ freadvcf<-function(file){
 
 
 
-#DNA sequence analysis#### 
-#hamming_distance
-#cmpute hamming distance (number of mismatch) for 2 string sequence of same size 
-hamming_distance<-function(x,y){
-  vecx<-strsplit(x,'')[[1]]
-  vecy<-strsplit(y,'')[[1]]
-  sum(vecx!=vecy)
-}
-#if consider indels, can use getDist of Alakazam
-#install.packages('alakazam')
-#need format seq like: ATC.G with '.' being gap
-# alakazam::seqDist(seq1, seq2, dist_mat = getDNAMatrix(gap=-1))#add +1 per base insertion
 
-# AlignSeqs<-function(seq_with_underline1,seq_with_underline2){
-#   vec<-strsplit(seq_with_underline,'_')[[1]]
-#   return(seq_with_dotgap)
-# }
 #QSUB FILES CREATION####
 
 
