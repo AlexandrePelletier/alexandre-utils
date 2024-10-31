@@ -1508,7 +1508,10 @@ GetGenesGTF<-function(genes,genome='hg38',gtf=NULL,anno_sources=c('ENSEMBL','HAV
   return(gtff)
 }
 
-GetSNPsInfos<-function(rsids,snp_db='/projectnb/tcwlab/RefData/SNPs/snp141.txt.gz'){
+#GetSNPsInfos
+#extract SNPs info from SNP database
+#if flip_alleles=TRUE, the allele in strand '-' are converted in alleles in strand '+'
+GetSNPsInfos<-function(rsids,snp_db='/projectnb/tcwlab/RefData/SNPs/snp141.txt.gz',flip_alleles=TRUE){
   
   cmd=paste('zcat',snp_db,
             "|grep -wE",paste0("'",paste(rsids,collapse = '|'),"'"))
@@ -1516,12 +1519,43 @@ GetSNPsInfos<-function(rsids,snp_db='/projectnb/tcwlab/RefData/SNPs/snp141.txt.g
   # fwrite(data.table(rsids),tempfile,col.names =FALSE)
   # cmd=paste('zcat',snp_db,
   #           "|grep -Fwf",tempfile)
-  return(fread(cmd = cmd,select=c(2:5,7,8,9,10,12,14,15,16,18),
-               col.names =c('chr','start','end','rsid','strand','ref','ref_ucsc','alleles','type','maf','maf_se','function','align_qual')))
+  snps_infos<-fread(cmd = cmd,select=c(2:5,7,8,9,10,12,14,15,16,18),
+        col.names =c('chr','start','end','rsid','strand','REF','ref_ucsc','alleles','type','maf','maf_se','function','align_qual'))
+  snps_infos<-snps_infos[chr%in%paste0('chr',c(1:22,'X','Y'))]
+  
+  if(flip_alleles){
+    message('converting alleles strands if strand==-')
+    
+    snps_infos[strand=='-',alleles:=strandflip(alleles)]
+    snps_infos[strand=='-',note:='strand flipped alleles']
+    snps_infos[,strand:='+']
+    
+  }
+  
+  snps_infos[,ALT:=paste(setdiff(strsplit(alleles,'/')[[1]],REF),collapse='/'),by='rsid']
+  
+  return(snps_infos)
   #col.names = c('chr','source','feature_type','start','end','score','strand','frame','anno')
   
 }
 
+strandflip<-function(nt_or_allele){
+ seps=str_extract_all(nt_or_allele,'\\/|\\||\\:|\\-|_')[[1]]
+ sep=seps[length(seps)]
+vecs=strsplit(nt_or_allele,sep)
+flips=lapply(vecs,strflip)
+
+return(sapply(flips, function(x)paste(x,collapse = sep)))
+
+}
+
+strflip<-function(x){
+  conv=list('A'='T',
+             'T'='A',
+             'C'='G',
+             'G'='C')
+  return(unlist(conv[x]))
+}
 #Interaction with bash####
 #bgzip
 #compressed in bed.gz like table
