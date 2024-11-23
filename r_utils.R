@@ -824,7 +824,8 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
                     cwd = cwd,
                     nThreads = nThreads ,proj_name = proj_name ,
                     loadBashrc = loadBashrc,modules = modules,conda_env = conda_env,micromamba_env = micromamba_env,
-                    maxHours =  maxHours,memPerCore = memPerCore,parallelize = FALSE)
+                    maxHours =  maxHours,memPerCore = memPerCore,
+                    parallelize = FALSE)
       
       # Submit the job using qsub and capture the job ID
       cmd_job<-paste(paste0('job_id',i,'=$(qsub'), '-N',paste0('j',child_jobnames[[i]]),child_jobfiles[[i]],proj_name,' | grep -Ewo [0-9]+)')
@@ -1089,14 +1090,14 @@ CreateJobForPyFile<-function(python_file,proj_name='tcwlab',modules=NULL,
 }
 
 #CreateJobForRfile~~~~
-#create job to execute R file using Rscript rfile.R [args]
-#args should be a list of argument to pass to Rscript command. 
-#If the first argument is a vector, will create one Rscript command by element of this vector
-#eg Rscript rfile.R element1
+#create job to execute an R file using Rscript rfile.R [args]
+#Arguments:
+#args: should be a list of argument to pass to Rscript command. If the first argument is a vector, will create one Rscript command by element of this vector
+# eg Rscript rfile.R element1
 # Rscript rfile.R element2
 
 
-CreateJobForRfile<-function(r_file,args=NULL,
+CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
                             parallelize=NULL,maxChildJobs=60,
                             proj_name='tcwlab',
                             modules='R',
@@ -1112,8 +1113,9 @@ CreateJobForRfile<-function(r_file,args=NULL,
     }
   }
   
-
-  qsub_file<-str_replace(r_file,'\\.R$','.qsub')
+  if(is.null(qsub_file)){
+    qsub_file<-str_replace(r_file,'\\.R$','.qsub')
+  }
   
   filename<-basename(r_file)
   projdir<-dirname(r_file)
@@ -1132,11 +1134,15 @@ CreateJobForRfile<-function(r_file,args=NULL,
     
   }else{
   cmds<-lapply(as.character(args[[1]]), function(arg1){
-    cmd<-paste('Rscript',r_file,arg1,paste(args[-1],collapse = ' '),'>>',paste0(str_replace(log_file,'.log$','_'),basename(arg1),'.log'))
+    log_file=paste0(str_replace(log_file,'.log$','_'),make.names(basename(arg1)),'.log')
+    cmd<-paste('Rscript',r_file,arg1,paste(unlist(args[-1]),collapse = ' '),'>>',log_file)
     return(cmd)
   })
   
   }
+  #show the first R lines
+  message('the 15 firsts R lines to executes')
+  system(paste('head -n 15',r_file))
   
   #pass the argument to createJobFile
   CreateJobFile(cmds,file = qsub_file,proj_name = proj_name ,
@@ -1146,15 +1152,12 @@ CreateJobForRfile<-function(r_file,args=NULL,
                 parallelize = parallelize,
                 maxChildJobs = maxChildJobs)
   
-  #show the first R lines
-  message('the 15 firsts R lines to executes')
-  system(paste('head -n 15',r_file))
-  
-  
 }
 
-RunQsub<-function(qsub_file=.Last.value,job_name=NULL,proj_name=NULL,wait_for=NULL,dryrun=FALSE){
-
+RunQsub<-function(qsub_file=NULL,job_name=NULL,proj_name=NULL,wait_for=NULL,dryrun=FALSE){
+  if(is.null(qsub_file)){
+    qsub_file=.Last.value
+  }
   if(!str_detect(qsub_file,'.qsub$'))qsub_file=paste0(tools::file_path_sans_ext(qsub_file),'.qsub')
   
   if(!file.exists(qsub_file))stop(qsub_file,' does not exist')
@@ -1187,7 +1190,7 @@ RunQsub<-function(qsub_file=.Last.value,job_name=NULL,proj_name=NULL,wait_for=NU
 
 
 
-WaitQsub<-function(qsub_file,jobid,max_hours=24){
+WaitQsub<-function(qsub_file,jobid=NULL,max_hours=24){
   if(!str_detect(qsub_file,'\\.qsub$'))qsub_file=paste0(tools::file_path_sans_ext(qsub_file),'.qsub')
   
   if(!file.exists(qsub_file))stop(qsub_file,' file does not exist')
@@ -1217,6 +1220,10 @@ WaitQsub<-function(qsub_file,jobid,max_hours=24){
   jobid_inlog=str_extract(tail(grep('job ID :',
                                     readLines(con = log_file,skipNul = TRUE),
                                     value = T),n = 1),'[0-9]+$')
+  if(is.null(jobid)){
+    message('jobid not provided, using last jobid found in log file. ')
+    jobid=jobid_inlog
+  }
 
   while(jobid!=jobid_inlog){
     message('waiting job ',jobid,' to be executed..')
@@ -1233,7 +1240,7 @@ WaitQsub<-function(qsub_file,jobid,max_hours=24){
   
   pattern=paste('Finished Analysis for job',jobid)
   lastlines<-tail(readLines(con = log_file,skipNul = TRUE))
-  
+
   while(!any(str_detect(lastlines,pattern)) ){
     message('waiting job ',jobid,' to be completed..')
     Sys.sleep(120)
