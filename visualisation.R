@@ -34,8 +34,11 @@ CompDEGs<-function(res_des,
   require('data.table')
   
   res_des1<-copy(res_des)
+  if(length(group.by)>1){
+    
+  }
   
-  res_des1[,comparison:=.SD,.SDcols=group.by]
+  res_des1[,comparison:=apply(.SD,1,function(...)paste(...,collapse = '.')),.SDcols=group.by]
   
   res_des1[,gene:=.SD,.SDcols=gene_column]
   
