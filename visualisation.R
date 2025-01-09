@@ -24,10 +24,11 @@ CompDEGs<-function(res_des,
                    FC_column='log2FoldChange',
                    pval_column='padj',
                    col_range=c(-2.5,2.5),
+                   colors=c("blue", "white", "red"),
+                   colors_resol=100,
                    show_rownames=TRUE,
                    cluster_cols=TRUE,
                    show_pval=TRUE,
-                   save.pdf=NULL,
                    width =7,
                    height = 7){
   require('pheatmap')
@@ -56,30 +57,15 @@ CompDEGs<-function(res_des,
     mat_dep<-FALSE
   }
   
+  color_gradient <- colorRampPalette(colors)
+  
+  
   col_breaks<-c(((col_range[1]*10):(col_range[2]*10))/10)
+  colors=color_gradient(length(col_breaks)-1)
 
-  if(!is.null(save.pdf)){
-    
-    pdf(save.pdf,width =width,height = height)
-    print(pheatmap::pheatmap(mat_de,
-                   breaks =col_breaks,
-                   show_rownames=show_rownames,
-                   color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
-                                                                         "RdBu")))(length(col_breaks)-1),
-                   fontsize_row = 7,
-                   main=FC_column,
-                   display_numbers = mat_dep,
-                   cluster_cols = cluster_cols,
-                   cellwidth =16,
-                   
-                   fontsize_number = 8))
-    
-    dev.off()
-  }
   return(pheatmap::pheatmap(mat_de,
                   breaks =col_breaks,
-                  color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
-                                                                        "RdBu")))(length(col_breaks)-1),
+                  color=colors,
                   fontsize_row = 7,
                   show_rownames=show_rownames,
                   main=FC_column,
@@ -109,7 +95,9 @@ source('emmaplot.R')
 
 CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE,
                        pval_col='padj',effect_col='NES',pathw_col='pathway',
-                       width =7,height = 7,max_color=2,palette_name=NULL,revert_color=NULL){
+                       colors=c("blue", "white", "red"),
+                       colors_resol=100,
+                       width =7,height = 7,max_color=2){
   require('pheatmap')
   require('data.table')
   res_gsea1<-copy(res_gsea_or_or)
@@ -136,28 +124,34 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
   res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<0.05,'*',ifelse(padj<0.25,'.',''))))]
 
   mat_gseap<-data.frame(dcast(res_gsea1,pathw~comp,value.var ='padjsig'),row.names = 'pathw')
+  color_gradient <- colorRampPalette(colors)
   
   if(all(c(-1,1)%in%unique(sign(res_gsea1[[effect_col]])))){
-    if(is.null(revert_color))revert_color=TRUE
+    #if(is.null(revert_color))revert_color=TRUE
     
     col_breaks<-c((-(10*max_color):(10*max_color))/10)
     col_breaks<-col_breaks[col_breaks>0.5|col_breaks<(-0.5)]
-    if(is.null(palette_name))palette_name='RdBu'
+    #if(is.null(palette_name))palette_name='RdBu'
 
   
   }else{
-    if(is.null(revert_color))revert_color=FALSE
+    #if(is.null(revert_color))revert_color=FALSE
     col_breaks<-0:(10*max_color)/10
-    if(is.null(palette_name))palette_name='Reds'
+    col_breaks<-col_breaks[col_breaks>0.5|col_breaks<(-0.5)]
+    
+    #if(is.null(palette_name))palette_name='Reds'
+
   }
   
-  colors=RColorBrewer::brewer.pal(n = 6, name =
-                                    palette_name)
-  if(revert_color){
-    colors=rev(colors)
-    
-  }
-  colors=colorRampPalette(colors)(length(col_breaks)-1)
+  # colors=RColorBrewer::brewer.pal(n = 6, name =
+  #                                   palette_name)
+  
+  colors=color_gradient(length(col_breaks)-1)
+  # if(revert_color){
+  #   colors=rev(colors)
+  #   
+  # }
+  # colors=colorRampPalette(colors)(length(col_breaks)-1)
   
  
   if(!is.null(legend.compa)){
