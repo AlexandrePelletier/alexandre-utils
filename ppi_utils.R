@@ -11,7 +11,7 @@ ppiNeighbors<-function(genes,ppi='/projectnb/tcwlab/RefData/STRINGdb/9606.protei
   }
   neighbs<-rbindlist(lapply(genes, function(g){
     neighb<-ppi[preferred_name.1==g&combined_score>combined_score.thr]
-    neighb<-neighb[,.(protein1,preferred_name.1,protein2,preferred_name.2,combined_score,annots)]
+    neighb<-neighb[,.(protein1,preferred_name.1,protein2,preferred_name.2,combined_score)]
     setnames(neighb,
              c('preferred_name.1','preferred_name.2'),
              c('gene_name','neighbor_name'))
@@ -32,7 +32,8 @@ ppiNeighbors<-function(genes,ppi='/projectnb/tcwlab/RefData/STRINGdb/9606.protei
 PlotString<-function(genes,ppi='/projectnb/tcwlab/RefData/STRINGdb/9606.protein.links.detailed.v12.0_reformat.annot.csv.gz',
                      combined_score.thr=250,res_de=NULL,
                      stat_col='statistic',gene_col='auto',
-                     color_limits=NULL,size_limits=NULL){
+                     color_limits=NULL,size_limits=NULL,
+                     genes_to_display=NULL){
   require(network)
   require(sna)
   require(ggraph)
@@ -41,6 +42,10 @@ PlotString<-function(genes,ppi='/projectnb/tcwlab/RefData/STRINGdb/9606.protein.
   if(is.character(ppi)){
     ppi<-fread(ppi)
     
+  }
+  
+  if(is.null(genes_to_display)){
+    genes_to_display=genes
   }
   
   ne=ppiNeighbors(genes,ppi = ppi,combined_score.thr=combined_score.thr)
@@ -54,15 +59,16 @@ PlotString<-function(genes,ppi='/projectnb/tcwlab/RefData/STRINGdb/9606.protein.
   
   nef<-nef[!duplicated(link)]
   
-  nef<-unique(nef[,.(gene_name,neighbor_name,combined_score,annots)])
+  nef<-unique(nef[,.(gene_name,neighbor_name,combined_score)])
   #create networks
-  net<-as.network(nef[,.(gene_name,neighbor_name,combined_score,annots)],loops = F,directed = F)
+  net<-as.network(nef[,.(gene_name,neighbor_name,combined_score)],loops = F,directed = F)
   
   
   #add node annot
   if(!is.null(res_de)){
     if(gene_col=='auto'){
-      gene_col=names(which(sapply(res_de,function(x)sum(network.vertex.names(net)%in%x)>length(network.vertex.names(net))*0.75)))
+      gene_col=names(which(sapply(res_de,
+                                  function(x)sum(network.vertex.names(net)%in%x)>length(network.vertex.names(net))*0.5)))
       if(length(gene_col)!=1){
         stop('cannot find gene column of the differential results automatically, need to specify gene_col')
       }
@@ -79,11 +85,23 @@ PlotString<-function(genes,ppi='/projectnb/tcwlab/RefData/STRINGdb/9606.protein.
     geom_edges(aes(size = combined_score), color = "grey",alpha=0.5) +
     geom_nodes(aes_string(color = stat_col),size=7) +
     theme_blank()+
-    geom_nodetext_repel(aes(label=vertex.names))+
-    scale_color_gradient2(low = 'blue3',mid = 'white',
-                          high='red3',midpoint = 0,
-                          limits=color_limits)+
+    geom_nodetext_repel(aes(label=ifelse(vertex.names%in%genes_to_display,
+                                         vertex.names,'')))+
     scale_size(range = c(0,2.5), limits = size_limits)
+  
+  if(is.numeric(res_depf[[stat_col]])){
+    p<-p+scale_color_gradient2(low = 'blue3',mid = 'white',
+                              high='red3',midpoint = 0,
+                              limits=color_limits)
+    
+    
+  }else{
+    p<-p+scale_color_manual(values = color_limits)
+    
+    
+    
+  }
+  
   return(p)
 }
 

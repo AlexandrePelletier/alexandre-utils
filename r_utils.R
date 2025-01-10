@@ -40,6 +40,12 @@ detach_package <- function(pkg, character.only = FALSE)
 #or detach_package("vegan", TRUE)
 
 # Stats Related Functions ####
+#zscore to pval
+getPval<-function(zscore){
+  return(2 * (1 - pnorm(abs(zscore))))
+}
+
+
 #CategoricalsToDummy
 #inputs: covariates in data.table format
 #outputs: dummy matrix : all categorical factors are transformed to binary (0/1) outcomes
@@ -543,11 +549,19 @@ FindGO_ID<-function(term_descriptions){
 
 
 #genomics coordinates manipulation ####
-start<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_|,|\\[|\\]")[[1]][2]))
-end<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_|,|\\[|\\]")[[1]][3]))
-seqid<-function(x)sapply(x,function(x)strsplit(x,"-|:|_|,|\\[|\\]")[[1]][1])
+start<-function(x,start_pos=2)sapply(x,function(x)as.numeric(strsplit(x,"\\.|-|:|_|,|\\[|\\]")[[1]][start_pos]))
+end<-function(x,end_pos=3)sapply(x,function(x)as.numeric(strsplit(x,"\\.|-|:|_|,|\\[|\\]")[[1]][end_pos]))
 
-pos<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_|,|\\[|\\]")[[1]][2]))
+seqid<-function(x,only_num=FALSE){
+  if(only_num){
+    str_extract(x,'[0-9]+')|>as.numeric()
+  }else{
+    sapply(x,function(x)strsplit(x,"\\.|-|:|_|,|\\[|\\]")[[1]][1])
+    
+  }
+}
+
+pos<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"\\.|-|:|_|,|\\[|\\]")[[1]][2]))
 
 
 ref<-function(x)sapply(x,function(x){
@@ -1135,7 +1149,8 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
   }else{
   cmds<-lapply(as.character(args[[1]]), function(arg1){
     log_file=paste0(str_replace(log_file,'.log$','_'),make.names(basename(arg1)),'.log')
-    cmd<-paste('Rscript',r_file,arg1,paste(unlist(args[-1]),collapse = ' '),'>>',log_file)
+    cmd<-paste('Rscript',r_file,arg1,paste(unlist(args[-1]),
+                                           collapse = ' '),'>>',log_file)
     return(cmd)
   })
   

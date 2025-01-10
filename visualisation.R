@@ -60,7 +60,7 @@ CompDEGs<-function(res_des,
   color_gradient <- colorRampPalette(colors)
   
   
-  col_breaks<-c(((col_range[1]*10):(col_range[2]*10))/10)
+  col_breaks<-c(((col_range[1]*colors_resol):(col_range[2]*colors_resol))/colors_resol)
   colors=color_gradient(length(col_breaks)-1)
 
   return(pheatmap::pheatmap(mat_de,
@@ -129,14 +129,14 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
   if(all(c(-1,1)%in%unique(sign(res_gsea1[[effect_col]])))){
     #if(is.null(revert_color))revert_color=TRUE
     
-    col_breaks<-c((-(10*max_color):(10*max_color))/10)
+    col_breaks<-c((-(colors_resol*max_color):(colors_resol*max_color))/colors_resol)
     col_breaks<-col_breaks[col_breaks>0.5|col_breaks<(-0.5)]
     #if(is.null(palette_name))palette_name='RdBu'
 
   
   }else{
     #if(is.null(revert_color))revert_color=FALSE
-    col_breaks<-0:(10*max_color)/10
+    col_breaks<-0:(colors_resol*max_color)/colors_resol
     col_breaks<-col_breaks[col_breaks>0.5|col_breaks<(-0.5)]
     
     #if(is.null(palette_name))palette_name='Reds'

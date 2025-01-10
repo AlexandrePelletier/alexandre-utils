@@ -54,12 +54,14 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
                          gene_col=c('gene','gene_name','Symbol','hgnc_symbol','gene_id','ensembl'),
                          duplicate_choice='top',
                          force_run=FALSE,
-                         group.by=NULL,minSize = 10,maxSize = 2000,
+                         group.by=NULL,n_cores=1,
+                         minSize = 10,maxSize = 2000,
                          gseaParam = 1,scoreType='std',eps=1e-50,
                          nPermSimple = 10000,...){
   require(data.table)
   require(fgsea)
   require(stringr)
+  require(parallel)
   
 
   if(!'data.table'%in%class(res_de)){
@@ -88,7 +90,7 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
    
     res_de_list<-split(res_de,by=group.by)
     
-    res_fgsea<-rbindlist(lapply(names(res_de_list),function(g){
+    res_fgsea<-rbindlist(mclapply(names(res_de_list),function(g){
       message('testing msigdb pathway enrichment in ',g)
       res_gsea<-RunFgseaMsigdb(res_de_list[[g]],score=score,
                                msigdb_path=msigdb_path,
@@ -101,7 +103,7 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
                                nPermSimple = nPermSimple,...)
       return(res_gsea[,query:=g])
       
-    }))
+    },mc.cores = n_cores))
     
   }else{
     msigdb<-fread(msigdb_path)
@@ -160,7 +162,7 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
     }))
     
     #annot 
-    res_fgsea<-merge(res_fgsea,unique(msigdb[,.(pathway.size,category,subcat,pathway.size)]))[order(pval)]
+    res_fgsea<-merge(res_fgsea,unique(msigdb[,.(pathway,category,subcat,pathway.size)]))[order(pval)]
     
   }
   
