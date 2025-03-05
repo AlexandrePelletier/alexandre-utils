@@ -146,7 +146,7 @@ add_node_label <- function(p,label.size=label.size,max.overlaps=10) {
 
 emmaplot<-function(res_fgsea,
                    pathway_names=NULL, 
-                   col.var="NES",
+                   col.var=NULL,
                    show_pathway_of=NULL,
                    min_edge=0.2,
                    label.size=2.5,
@@ -165,9 +165,12 @@ emmaplot<-function(res_fgsea,
 
   
   if(all(c('term','n.overlap')%in%colnames(res_fgsea))){
+    col.var='fold.enrichment'
     res_fgsea[,pathway:=term]
-    res_fgsea[,NES:=fold.enrichment]
     res_fgsea[,size:=n.overlap]
+    
+  }else{
+    col.var='NES'
     
   }
   

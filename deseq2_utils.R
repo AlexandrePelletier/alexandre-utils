@@ -87,7 +87,7 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
   
   
   if(!is.null(group.by)){
-   
+
     res_de_list<-split(res_de,by=group.by)
     
     res_fgsea<-rbindlist(mclapply(names(res_de_list),function(g){
@@ -107,6 +107,11 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
     
   }else{
     msigdb<-fread(msigdb_path)
+    
+    #automatically found the matching gene column
+    genecol<-which(sapply(msigdb,function(x)length(intersect(x,res_de$gene))>200))
+    msigdb$gene<-msigdb[[genecol]]
+    message(length(intersect(res_de$gene,msigdb$gene)),'/', length(unique(res_de$gene)),' genes found in MSigDB reference')
     
     if(mean(str_detect(res_de$gene,'^ENS'))>0.5){
       message('ENSEMBL ID detected, finding the appropriate Msigdb ref')

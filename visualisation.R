@@ -169,12 +169,10 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
                  fontsize_row = 7,
                  main=effect_col,
                  display_numbers = mat_gseap[rownames(mat_gsea),colnames(mat_gsea)],
+                 number_color = 'white',
                  cluster_cols = T,
                  cellwidth =16,
                  annotation_col = mtd_compa,
-                 
-                 
-                 
                  fontsize_number = 10))
   
 }
