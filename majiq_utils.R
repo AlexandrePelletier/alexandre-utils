@@ -68,7 +68,7 @@ FormatVoilaDtPsi<-function(res_voila,case_name,control_name){
   
   #then, take care of harmonizing the dtpsi/HET specific column: 
   cols_control=colnames(res_voila)[str_detect(colnames(res_voila),control_name)]
-  cols_case=colnames(res_voila)[str_detect(colnames(res_voila),case_name)]
+  cols_case=colnames(res_voila)[str_detect(colnames(res_voila),case_name)&!str_detect(colnames(res_voila),control_name)]
   #cols_groups<-c(cols_control,cols_case)
   
   
@@ -114,7 +114,7 @@ FormatVoilaPSI<-function(res_tsv){
   res_long<-merge(res_long,unique(res_tsv[,.SD,.SDcols=cols_ok]))
   
   #transform numerical columns 
-  cols_num<-colnames(res_long)[str_detect(colnames(res_long),'mean|median|quantile|percentile|TNOM|TTEST|WILCOXON|psi|probability')]
+  cols_num<-c(colnames(res_long)[str_detect(colnames(res_long),'mean|median|quantile|percentile|TNOM|TTEST|WILCOXON|psi|probability')],'de_novo_junctions')
   res_long[,(cols_num):=lapply(.SD,as.numeric),.SDcols=cols_num]
   return(res_long)
 }

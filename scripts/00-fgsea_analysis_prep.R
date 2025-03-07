@@ -41,7 +41,17 @@ genesets_mtd<-rbind(do.call(rbind,lapply(names(cps),function(p)data.table(pathwa
 
 
 unique(genesets_mtd[,.(category,subcat,pathway,pathway.size)])
-fwrite(genesets_mtd,'/projectnb/tcwlab/MSigDB/all_CPandGOs_gene_and_genesets.csv.gz')
 
 fwrite(unique(genesets_mtd[,.(category,subcat,pathway,pathway.size)]),'/projectnb/tcwlab/MSigDB/all_CPandGOs_genesets_metadata.csv.gz')
+
+
+#add mouse gene and gene_id
+msig<-genesets_mtd
+mouse<-unique(fread('/projectnb/tcwlab/RefData/gencode/HOM_MouseHumanSequence_translation_reformat.csv.gz'),by='Symbol.human')
+msig[,mouse_gene:=mouse[gene,on='Symbol.human']$Symbol.mouse]
+
+ensembl<-fread('/projectnb/tcwlab/RefData/gencode/hg38/gencode.v45.gene_id_names.tsv')|>unique(by='gene_name')
+
+msig[,gene_id:=ensembl[gene,on='gene_name']$gene_id]
+fwrite(msig,'/projectnb/tcwlab/MSigDB/all_CPandGOs_gene_and_genesets.csv.gz')
 

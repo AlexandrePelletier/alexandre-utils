@@ -233,3 +233,17 @@ correl<-function(x,y=NULL,ret="pval",verbose=F){
   }
   
 }
+
+
+#PCsignCorr: allign the sign of the PC coordinate with the expression matrix. ie. a sample with a high expression will have the higher PC coord
+#x: pc coords with sample names
+#mat= scaled normalized expression matrix used for PC. if not for correct the PC1, should be filtered to have only the feature contributing tho the PC to be corrected
+PCsignCorr<-function(x,mat,pc_col='PC1',sample_col='sample_id'){
+  if(colSums(mat)[which.max(x)]-colSums(mat)[which.min(x)]<0){
+    message('top and bottom sample have been inverted, correcting')
+    return(-x)
+  }else{
+    message('PC and expression matrix well aligned')
+    return(x)
+  }
+}

@@ -12,14 +12,21 @@ library(data.table)
 
 LeadingEdges<-function(res_fgsea){
   if(all(c('term','n.overlap','genes.overlap')%in%colnames(res_fgsea))){
+    
     l_genes<-str_extract_all(res_fgsea$genes.overlap,'[A-Za-z0-9]+')
     l_genes<-lapply(l_genes, function(x)x[x!='c'])
     names(l_genes)<-res_fgsea$pathway
     return(l_genes)
     
   }else{
-    l_genes<-str_extract_all(res_fgsea$leadingEdge,'[A-Za-z0-9]+')
-    l_genes<-lapply(l_genes, function(x)x[x!='c'])
+    if(is.character(res_fgsea$leadingEdge)){
+      l_genes<-str_extract_all(res_fgsea$leadingEdge,'[A-Za-z0-9]+')
+      l_genes<-lapply(l_genes, function(x)x[x!='c'])
+    }else{
+      l_genes<-res_fgsea$leadingEdge
+    }
+      
+
     names(l_genes)<-res_fgsea$pathway
     return(l_genes)
   }
@@ -127,8 +134,8 @@ add_category_nodes <- function(p,col.var,cols=c('blue','white','red'),cols_lims=
   return(p)
 }
 add_node_label <- function(p,label.size=label.size,max.overlaps=10) {
-  
-  p <- p + geom_node_text(aes_(label=~name),
+
+  p <- p + geom_node_text(aes(label=name),
                           size = label.size, repel=TRUE,
                           max.overlaps=max.overlaps)
   
@@ -139,7 +146,7 @@ add_node_label <- function(p,label.size=label.size,max.overlaps=10) {
 
 emmaplot<-function(res_fgsea,
                    pathway_names=NULL, 
-                   col.var="NES",
+                   col.var=NULL,
                    show_pathway_of=NULL,
                    min_edge=0.2,
                    label.size=2.5,
@@ -158,9 +165,12 @@ emmaplot<-function(res_fgsea,
 
   
   if(all(c('term','n.overlap')%in%colnames(res_fgsea))){
+    col.var='fold.enrichment'
     res_fgsea[,pathway:=term]
-    res_fgsea[,NES:=fold.enrichment]
     res_fgsea[,size:=n.overlap]
+    
+  }else{
+    col.var='NES'
     
   }
   
@@ -207,8 +217,8 @@ emmaplot<-function(res_fgsea,
     
     
     p <- ggraph(g, layout='nicely')
-    
-    p <- p + geom_edge_link(alpha=.8, aes_(width=~I(width)),
+    #width=enquo(width)
+    p <- p + geom_edge_link(alpha=.8, aes(edge_width=I(width)),
                             colour='darkgrey')
     ## add dot
     p <- add_category_nodes(p = p,col.var =col.var,cols=cols,cols_lims=cols_lims)

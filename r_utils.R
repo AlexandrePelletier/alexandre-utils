@@ -40,6 +40,12 @@ detach_package <- function(pkg, character.only = FALSE)
 #or detach_package("vegan", TRUE)
 
 # Stats Related Functions ####
+#zscore to pval
+getPval<-function(zscore){
+  return(2 * (1 - pnorm(abs(zscore))))
+}
+
+
 #CategoricalsToDummy
 #inputs: covariates in data.table format
 #outputs: dummy matrix : all categorical factors are transformed to binary (0/1) outcomes
@@ -543,11 +549,19 @@ FindGO_ID<-function(term_descriptions){
 
 
 #genomics coordinates manipulation ####
-start<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_|,|\\[|\\]")[[1]][2]))
-end<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_|,|\\[|\\]")[[1]][3]))
-seqid<-function(x)sapply(x,function(x)strsplit(x,"-|:|_|,|\\[|\\]")[[1]][1])
+start<-function(x,start_pos=2)sapply(x,function(x)as.numeric(strsplit(x,"\\.|-|:|_|,|\\[|\\]")[[1]][start_pos]))
+end<-function(x,end_pos=3)sapply(x,function(x)as.numeric(strsplit(x,"\\.|-|:|_|,|\\[|\\]")[[1]][end_pos]))
 
-pos<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-|:|_|,|\\[|\\]")[[1]][2]))
+seqid<-function(x,only_num=FALSE){
+  if(only_num){
+    str_extract(x,'[0-9]+')|>as.numeric()
+  }else{
+    sapply(x,function(x)strsplit(x,"\\.|-|:|_|,|\\[|\\]")[[1]][1])
+    
+  }
+}
+
+pos<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"\\.|-|:|_|,|\\[|\\]")[[1]][2]))
 
 
 ref<-function(x)sapply(x,function(x){
@@ -732,6 +746,8 @@ freadvcf<-function(file){
 }
 
 
+
+
 #QSUB FILES CREATION####
 
 
@@ -822,7 +838,8 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
                     cwd = cwd,
                     nThreads = nThreads ,proj_name = proj_name ,
                     loadBashrc = loadBashrc,modules = modules,conda_env = conda_env,micromamba_env = micromamba_env,
-                    maxHours =  maxHours,memPerCore = memPerCore,parallelize = FALSE)
+                    maxHours =  maxHours,memPerCore = memPerCore,
+                    parallelize = FALSE)
       
       # Submit the job using qsub and capture the job ID
       cmd_job<-paste(paste0('job_id',i,'=$(qsub'), '-N',paste0('j',child_jobnames[[i]]),child_jobfiles[[i]],proj_name,' | grep -Ewo [0-9]+)')
@@ -975,6 +992,7 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   message('5 first commands:')
   cat( head(cmds,5),sep = '\n')
   
+  return(invisible(file_path))
 }
 
 
@@ -1086,14 +1104,14 @@ CreateJobForPyFile<-function(python_file,proj_name='tcwlab',modules=NULL,
 }
 
 #CreateJobForRfile~~~~
-#create job to execute R file using Rscript rfile.R [args]
-#args should be a list of argument to pass to Rscript command. 
-#If the first argument is a vector, will create one Rscript command by element of this vector
-#eg Rscript rfile.R element1
+#create job to execute an R file using Rscript rfile.R [args]
+#Arguments:
+#args: should be a list of argument to pass to Rscript command. If the first argument is a vector, will create one Rscript command by element of this vector
+# eg Rscript rfile.R element1
 # Rscript rfile.R element2
 
 
-CreateJobForRfile<-function(r_file,args=NULL,
+CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
                             parallelize=NULL,maxChildJobs=60,
                             proj_name='tcwlab',
                             modules='R',
@@ -1109,8 +1127,9 @@ CreateJobForRfile<-function(r_file,args=NULL,
     }
   }
   
-
-  qsub_file<-str_replace(r_file,'\\.R$','.qsub')
+  if(is.null(qsub_file)){
+    qsub_file<-str_replace(r_file,'\\.R$','.qsub')
+  }
   
   filename<-basename(r_file)
   projdir<-dirname(r_file)
@@ -1129,11 +1148,16 @@ CreateJobForRfile<-function(r_file,args=NULL,
     
   }else{
   cmds<-lapply(as.character(args[[1]]), function(arg1){
-    cmd<-paste('Rscript',r_file,arg1,paste(args[-1],collapse = ' '),'>>',paste0(str_replace(log_file,'.log$','_'),basename(arg1),'.log'))
+    log_file=paste0(str_replace(log_file,'.log$','_'),make.names(basename(arg1)),'.log')
+    cmd<-paste('Rscript',r_file,arg1,paste(unlist(args[-1]),
+                                           collapse = ' '),'>>',log_file)
     return(cmd)
   })
   
   }
+  #show the first R lines
+  message('the 15 firsts R lines to executes')
+  system(paste('head -n 15',r_file))
   
   #pass the argument to createJobFile
   CreateJobFile(cmds,file = qsub_file,proj_name = proj_name ,
@@ -1143,21 +1167,24 @@ CreateJobForRfile<-function(r_file,args=NULL,
                 parallelize = parallelize,
                 maxChildJobs = maxChildJobs)
   
-  #show the first R lines
-  message('the 15 firsts R lines to executes')
-  system(paste('head -n 15',r_file))
-  
-  
 }
 
-RunQsub<-function(qsub_file,job_name,proj_name=NULL,wait_for=NULL,dryrun=FALSE){
+RunQsub<-function(qsub_file=NULL,job_name=NULL,proj_name=NULL,wait_for=NULL,dryrun=FALSE){
+  if(is.null(qsub_file)){
+    qsub_file=.Last.value
+  }
   if(!str_detect(qsub_file,'.qsub$'))qsub_file=paste0(tools::file_path_sans_ext(qsub_file),'.qsub')
   
-  if(!file.exists(qsub_file))stop(qsub_file,' do not exist')
+  if(!file.exists(qsub_file))stop(qsub_file,' does not exist')
   
+  if(is.null(job_name)){
+    job_name<-str_sub(str_remove(basename(qsub_file),'[0-9A-Za-z]+-'),end = 15)
+  }
+  message('running job file ', qsub_file,' with name ', job_name)
+
   if(is.null(wait_for)){
     cmd<-paste('qsub','-N',job_name,qsub_file,proj_name)
- 
+
   }else{
     cmd<-paste('qsub',
                '-N',job_name,
@@ -1167,7 +1194,7 @@ RunQsub<-function(qsub_file,job_name,proj_name=NULL,wait_for=NULL,dryrun=FALSE){
   if(!dryrun){
     message<-system(cmd,intern = TRUE)
     message(paste(message,collapse = '\n'))
-    
+
     jobid<-ifelse(str_detect(message,'has been submitted'),str_extract(message,'[0-9]+'),NA)
     return(jobid[!is.na(jobid)])
   }else{
@@ -1178,7 +1205,7 @@ RunQsub<-function(qsub_file,job_name,proj_name=NULL,wait_for=NULL,dryrun=FALSE){
 
 
 
-WaitQsub<-function(qsub_file,jobid,max_hours=24){
+WaitQsub<-function(qsub_file,jobid=NULL,max_hours=24){
   if(!str_detect(qsub_file,'\\.qsub$'))qsub_file=paste0(tools::file_path_sans_ext(qsub_file),'.qsub')
   
   if(!file.exists(qsub_file))stop(qsub_file,' file does not exist')
@@ -1208,6 +1235,10 @@ WaitQsub<-function(qsub_file,jobid,max_hours=24){
   jobid_inlog=str_extract(tail(grep('job ID :',
                                     readLines(con = log_file,skipNul = TRUE),
                                     value = T),n = 1),'[0-9]+$')
+  if(is.null(jobid)){
+    message('jobid not provided, using last jobid found in log file. ')
+    jobid=jobid_inlog
+  }
 
   while(jobid!=jobid_inlog){
     message('waiting job ',jobid,' to be executed..')
@@ -1224,7 +1255,7 @@ WaitQsub<-function(qsub_file,jobid,max_hours=24){
   
   pattern=paste('Finished Analysis for job',jobid)
   lastlines<-tail(readLines(con = log_file,skipNul = TRUE))
-  
+
   while(!any(str_detect(lastlines,pattern)) ){
     message('waiting job ',jobid,' to be completed..')
     Sys.sleep(120)
@@ -1499,7 +1530,10 @@ GetGenesGTF<-function(genes,genome='hg38',gtf=NULL,anno_sources=c('ENSEMBL','HAV
   return(gtff)
 }
 
-GetSNPsInfos<-function(rsids,snp_db='/projectnb/tcwlab/RefData/SNPs/snp141.txt.gz'){
+#GetSNPsInfos
+#extract SNPs info from SNP database
+#if flip_alleles=TRUE, the allele in strand '-' are converted in alleles in strand '+'
+GetSNPsInfos<-function(rsids,snp_db='/projectnb/tcwlab/RefData/SNPs/snp141.txt.gz',flip_alleles=TRUE){
   
   cmd=paste('zcat',snp_db,
             "|grep -wE",paste0("'",paste(rsids,collapse = '|'),"'"))
@@ -1507,12 +1541,43 @@ GetSNPsInfos<-function(rsids,snp_db='/projectnb/tcwlab/RefData/SNPs/snp141.txt.g
   # fwrite(data.table(rsids),tempfile,col.names =FALSE)
   # cmd=paste('zcat',snp_db,
   #           "|grep -Fwf",tempfile)
-  return(fread(cmd = cmd,select=c(2:5,7,8,9,10,12,14,15,16,18),
-               col.names =c('chr','start','end','rsid','strand','ref','ref_ucsc','alleles','type','maf','maf_se','function','align_qual')))
+  snps_infos<-fread(cmd = cmd,select=c(2:5,7,8,9,10,12,14,15,16,18),
+        col.names =c('chr','start','end','rsid','strand','REF','ref_ucsc','alleles','type','maf','maf_se','function','align_qual'))
+  snps_infos<-snps_infos[chr%in%paste0('chr',c(1:22,'X','Y'))]
+  
+  if(flip_alleles){
+    message('converting alleles strands if strand==-')
+    
+    snps_infos[strand=='-',alleles:=strandflip(alleles)]
+    snps_infos[strand=='-',note:='strand flipped alleles']
+    snps_infos[,strand:='+']
+    
+  }
+  
+  snps_infos[,ALT:=paste(setdiff(strsplit(alleles,'/')[[1]],REF),collapse='/'),by='rsid']
+  
+  return(snps_infos)
   #col.names = c('chr','source','feature_type','start','end','score','strand','frame','anno')
   
 }
 
+strandflip<-function(nt_or_allele){
+ seps=str_extract_all(nt_or_allele,'\\/|\\||\\:|\\-|_')[[1]]
+ sep=seps[length(seps)]
+vecs=strsplit(nt_or_allele,sep)
+flips=lapply(vecs,strflip)
+
+return(sapply(flips, function(x)paste(x,collapse = sep)))
+
+}
+
+strflip<-function(x){
+  conv=list('A'='T',
+             'T'='A',
+             'C'='G',
+             'G'='C')
+  return(unlist(conv[x]))
+}
 #Interaction with bash####
 #bgzip
 #compressed in bed.gz like table

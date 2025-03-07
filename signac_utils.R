@@ -26,15 +26,22 @@ CheckMotif<-function(object,peaks,motif.name=NULL,assay = NULL,return.peaks=FALS
   
 }
 GetMotifIDs<-function(object,motif.names,assay=NULL,return_dt=FALSE){
-  if(is.null(assay))assay<-DefaultAssay(object)
-  idx<-match(motif.names,object@assays[[assay]]@motifs@motif.names)
+  
+  if('Seurat' %in%class(object)){
+    if(is.null(assay))assay<-DefaultAssay(object)
+    object=object@assays[[assay]]
+    
+  }
+  
+    idx<-match(motif.names,object@motif.names)
+  
   if(return_dt){
     return(
       data.table(motif.name=motif.names,
-                 motif.id=names(object@assays[[assay]]@motifs@motif.names[idx]))
+                 motif.id=names(object@motif.names[idx]))
     )
   }else{
-    return(names(object@assays[[assay]]@motifs@motif.names[idx]))
+    return(names(object@motif.names[idx]))
   }
   
 }
@@ -44,12 +51,19 @@ GetMotifs<-function(object,peaks,motifs=NULL,assay = NULL){
   require("Signac")
   require("data.table")
   
-  if(is.null(assay))assay=DefaultAssay(object)
-  
-  motif.all <- GetMotifData(
-    object = object, assay = assay, slot = "data"
-  )
-  
+  if('Seurat' %in%class(object)){
+    if(is.null(assay))assay=DefaultAssay(object)
+    
+    motif.all <- GetMotifData(
+      object = object, assay = assay, slot = "data"
+    )
+    
+  }else{
+    motif.all <- GetMotifData(
+      object = object
+    )
+  }
+ 
   if(is.null(motifs)) motifs<-colnames(motif.all)
   
   motif.filtered<-motif.all[peaks,motifs,drop=F]
@@ -61,11 +75,30 @@ GetMotifs<-function(object,peaks,motifs=NULL,assay = NULL){
   motif_dt[(presence)] 
   motif_dt<-motif_dt[(presence)][,-"presence"]
   
-  motifsnames<-data.table(motif.name=object[[assay]]@motifs@motif.names,
-                          motif=names(object[[assay]]@motifs@motif.names))
+  if('Seurat' %in%class(object)){
+    motifsnames<-data.table(motif.name=object[[assay]]@motifs@motif.names,
+                            motif=names(object[[assay]]@motifs@motif.names))
+    
+  }else{
+    motifsnames<-data.table(motif.name=object@motif.names,
+                            motif=names(object@motif.names))
+  }
+  
+  
+  
+
   motif_dt<-merge(motif_dt,motifsnames)
   
-  ranges_list<-object[[assay]]@motifs@positions[ unique(motif_dt$motif)]
+  if('Seurat' %in%class(object)){
+    ranges_list<-object[[assay]]@motifs@positions[ unique(motif_dt$motif)]
+    
+    
+  }else{
+    ranges_list<-object@positions[ unique(motif_dt$motif)]
+    
+  }
+  
+  
 
   motifs_pos <- rbindlist(lapply(names(ranges_list),function(motifid){
     
@@ -95,11 +128,21 @@ GetMotifs<-function(object,peaks,motifs=NULL,assay = NULL){
 
 
 TFMotifPlot<-function(object,region,motif.name,assay=NULL){
-  if(is.null(assay))assay<-DefaultAssay(object)
+  
+  if('Seurat' %in%class(object)){
+    if(is.null(assay))assay<-DefaultAssay(object)
+    object=object@assays[[assay]]
+    
+  }
+  
   start.pos <- start(region)
   end.pos <- end(region)
   chromosome <- seqid(region)
-  ranges<-object@assays[[assay]]@motifs@positions[[GetMotifIDs(object,motif.names = motif.name)]]
+  
+
+  ranges<-object@positions[[GetMotifIDs(object,motif.names = motif.name)]]
+    
+  
   dt <- data.table(as.data.frame(ranges))
   dt_reg<-dt[seqnames==chromosome&start>start.pos&end<end.pos]
   
@@ -114,14 +157,19 @@ TFMotifPlot<-function(object,region,motif.name,assay=NULL){
 }
 
 TFsMotifPlot<-function(object,region,motif.names,assay=NULL,size=2,alpha=1,pad=0,expand=FALSE){
-  if(is.null(assay))assay<-DefaultAssay(object)
+  if('Seurat' %in%class(object)){
+    if(is.null(assay))assay<-DefaultAssay(object)
+    object=object@assays[[assay]]
+    
+  }
+  
   start.pos <- start(region)
   end.pos <- end(region)
   chromosome <- seqid(region)
   
   dt_region <-Reduce(rbind,lapply(motif.names,function(x){
     
-    ranges<-object@assays[[assay]]@motifs@positions[GetMotifIDs(object,motif.names = x)]
+    ranges<-object@positions[GetMotifIDs(object,motif.names = x)]
     
     dt<-data.table(as.data.frame(ranges))[seqnames==chromosome&start>start.pos&end<end.pos][,motif.name:=x]
     return(dt)
