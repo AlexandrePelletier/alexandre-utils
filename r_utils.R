@@ -1290,7 +1290,7 @@ bed_inter<- function(a, b, opt1="-wa",
     if(is.data.frame(x)){
       files_to_rm[i]<-TRUE
       file_path<-fp(out_dir,paste0("temp",i,".bed"))
-      fwrite(x,file_path,sep="\t",col.names = FALSE)
+      fwrite(x,file_path,sep="\t",col.names = FALSE,scipen = 999)
       
     }else{
       file_path<-x
