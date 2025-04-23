@@ -42,13 +42,15 @@ PcaPlot<-function(pca,mtd,group.by, pc_x='PC1', pc_y='PC2',
   
   pca_dt_toplot<-unique(pca_dt,by=sample_col)
   pca_dt_toplot[,sample_id:=.SD,.SDcols=sample_col]
-  if(all(is.character(label))){
+  if(is.logical(label)){
+    if(label){
+      pca_dt_toplot[,sample_to_label:=TRUE]
+      
+    }
+    
+  }else if(all(is.character(label))){
     pca_dt_toplot[,sample_to_label:=sample_id%in%label]
     label<-TRUE
-  }else{
-    pca_dt_toplot[,sample_to_label:=label]
-    label<-TRUE
-    
   }
   ps<-lapply(group.by, function(c){
     p<-ggplot(pca_dt_toplot,aes_string(x=pc_x,y=pc_y))+geom_point(aes_string(col=c))+

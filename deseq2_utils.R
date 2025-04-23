@@ -125,6 +125,7 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
     #automatically found the matching gene column
     genecol<-which(sapply(msigdb,function(x)length(intersect(x,res_de$gene))>length(unique(msigdb$gene))*0.10))
     message('using ',colnames(msigdb)[genecol],' column of msigdb reference matching query')
+
     msigdb$gene<-msigdb[[genecol]]
     message(length(intersect(res_de$gene,msigdb$gene)),'/', length(unique(res_de$gene)),' genes found in MSigDB reference')
     
