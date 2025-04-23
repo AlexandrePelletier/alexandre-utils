@@ -7,7 +7,7 @@ message(getDTthreads(),' threads available for data.table')
 
 library("stringr")
 library("ggplot2")
-library("ggrepel")
+#library("ggrepel")
 library("patchwork")
 #library("here")
 #library('qs')
