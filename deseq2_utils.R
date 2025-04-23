@@ -106,10 +106,10 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
     },mc.cores = n_cores))
     
   }else{
-    msigdb<-fread(msigdb_path)
+    msigdb<-fread(file=msigdb_path)
     
     #automatically found the matching gene column
-    genecol<-which(sapply(msigdb,function(x)length(intersect(x,res_de$gene))>200))
+    genecol<-which(sapply(msigdb,function(x)length(intersect(x,res_de$gene))>200|length(intersect(x,res_de$gene))>length(unique(res_de$gene))*0.2))
     msigdb$gene<-msigdb[[genecol]]
     message(length(intersect(res_de$gene,msigdb$gene)),'/', length(unique(res_de$gene)),' genes found in MSigDB reference')
     
