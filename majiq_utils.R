@@ -125,17 +125,18 @@ FormatVoilaPSI<-function(res_tsv){
 #Inputs: data.table of long format of voila results (pass through `FormatVoila` functions)
 #outputs: annotated data.table, can have more row than the input data,table, because one junction can be annotated with 2 different splicing_type depending of the context
 AnnotVoila<-function(voila_long,modulizer_dir,annos=c('cassette','intron','alt3','alt5','first','last','orphan','exclusive'),
-                     cols_to_keep=c('lsv_id','complex','denovo','spliced_with','spliced_with_coord','junction_name','junction_coord','event_size','event_type')){
+                     cols_to_keep=c('complex','denovo','spliced_with','spliced_with_coord',
+                                    'junction_name', 'event_size','event_type')){
   anno_files<-list.files(modulizer_dir,pattern = paste(annos,collapse = '|'),full.names = T)
   anno<-rbindlist(lapply(anno_files,
                          function(f)fread(f)[,event_type:=tools::file_path_sans_ext(basename(f))]),fill = T)
   anno<-unique(anno)[lsv_id!='']
-  
+  anno[,junctions_coords:=junction_coord]
   if(!is.null(cols_to_keep)){
-    anno<-anno[,.SD,.SDcols=cols_to_keep]
+    anno<-anno[,.SD,.SDcols=c(cols_to_keep,'lsv_id','junctions_coords')]
     
   }
-  voila_long_anno<-merge(voila_long,anno,all.x = T,allow.cartesian = T)
+  voila_long_anno<-merge(voila_long,anno,all.x = T,allow.cartesian = T,by=c('lsv_id','junctions_coords'))
   voila_long_anno[is.na(event_type),event_type:='other']
   voila_long_anno[,junction_type:=ifelse(de_novo_junctions==1,'denovo','known')]
   voila_long_anno[,junction_type:=factor(junction_type,levels=c('known','denovo'))]

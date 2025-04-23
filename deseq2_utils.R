@@ -43,18 +43,20 @@ ScaleDESeq2Covs<-function(mtd,covs){
 
 
 #RunFgseaMsigdb
-#inputs: res_de: datatable of differential expression results, with gene name (in gene symbol format) and statistical test
-#       msigdb_path : path to MSigdb data, should a table with at least column 'pathway', 'gene', and 'category' of the pathways
-#       score : from which column of the res_de to collect the score/statistic to use to rank genes for fgsea?
-#outputs : res of fgsea in data table format
+#res_de: datatable of differential expression results, with gene name (in gene symbol format) and statistical test
+# msigdb :MSigdb data or path to it, should a table with at least column 'pathway', 'gene', and 'category' of the pathways
+# score : from which column of the res_de to collect the score/statistic to use to rank genes for fgsea?
+#return res of fgsea in data table format
 #Notes : fgsea will be run by 'category' of the Msigdb (Canonical Pathways 'CP' and Gene ontoloy 'GO'  term by default) if  can specify 
 #duplicate_choice: how deal with duplicated gene_names / id/. keep only the 'top' one based on the stat (default), 'random'ly pick one , or do 'nothing'. 
 RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
-                         msigdb_path='/projectnb/tcwlab/MSigDB/all_CPandGOs_gene_and_genesets.csv.gz',
+                         msigdb='/projectnb/tcwlab/MSigDB/all_CPandGOs_gene_and_genesets.csv.gz',
                          gene_col=c('gene','gene_name','Symbol','hgnc_symbol','gene_id','ensembl'),
                          duplicate_choice='top',
                          force_run=FALSE,
-                         group.by=NULL,n_cores=1,
+                         group.by=NULL,
+                         div_by_cat=NULL,
+                         annot=TRUE,
                          minSize = 10,maxSize = 2000,
                          gseaParam = 1,scoreType='std',eps=1e-50,
                          nPermSimple = 10000,...){
@@ -88,28 +90,41 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
   
   if(!is.null(group.by)){
 
-    res_de_list<-split(res_de,by=group.by)
-    
-    res_fgsea<-rbindlist(mclapply(names(res_de_list),function(g){
-      message('testing msigdb pathway enrichment in ',g)
-      res_gsea<-RunFgseaMsigdb(res_de_list[[g]],score=score,
-                               msigdb_path=msigdb_path,
+    res_fgsea<-res_de[,{
+      res_gsea<-RunFgseaMsigdb(.SD,score=score,
+                               msigdb=msigdb,
                                gene_col=gene_col,
                                duplicate_choice=duplicate_choice,
                                force_run=force_run,
                                group.by=NULL,
+                               div_by_cat=div_by_cat,
+                               annot=annot,
                                minSize = minSize,maxSize = maxSize,
                                gseaParam = gseaParam,scoreType=scoreType,eps=eps,
                                nPermSimple = nPermSimple,...)
-      return(res_gsea[,query:=g])
+      res_gsea[]
       
-    },mc.cores = n_cores))
+    },by=group.by]
     
   }else{
-    msigdb<-fread(msigdb_path)
+    if(is.character(msigdb)){
+      if(is.null(div_by_cat)){
+        div_by_cat<-TRUE
+        
+      }
+      msigdb<-fread(msigdb)
+    }else{
+      if(is.null(div_by_cat)){
+        div_by_cat<-FALSE
+        
+      }      
+    }
+
+
     
     #automatically found the matching gene column
-    genecol<-which(sapply(msigdb,function(x)length(intersect(x,res_de$gene))>200))
+    genecol<-which(sapply(msigdb,function(x)length(intersect(x,res_de$gene))>length(unique(msigdb$gene))*0.10))
+    message('using ',colnames(msigdb)[genecol],' column of msigdb reference matching query')
     msigdb$gene<-msigdb[[genecol]]
     message(length(intersect(res_de$gene,msigdb$gene)),'/', length(unique(res_de$gene)),' genes found in MSigDB reference')
     
@@ -154,20 +169,27 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
       print(head(sort(stats,decreasing = T)))
       
     }
-    
-    res_fgsea<-rbindlist(lapply(unique(msigdb$category), function(cat){
+      if(div_by_cat){
+        msigdb$group<-msigdb$category
+      }else{
+        msigdb$group<-'all'
+      }
+     res_fgsea<-rbindlist(lapply(unique(msigdb$group), function(cat){
       
-      msigdbf<-msigdb[category==cat]
+      msigdbf<-msigdb[group==cat]
       pathways=split(msigdbf$gene,msigdbf$pathway)
       res<-fgsea(pathways,stats,minSize = minSize,maxSize = maxSize,
                  gseaParam = gseaParam,scoreType=scoreType,eps=eps,
                  nPermSimple = nPermSimple,...)
       
-      return(res[,category:=cat])
+      return(res[,pathway_group:=cat])
     }))
     
     #annot 
-    res_fgsea<-merge(res_fgsea,unique(msigdb[,.(pathway,category,subcat,pathway.size)]))[order(pval)]
+     if(annot){
+       res_fgsea<-merge(res_fgsea,unique(msigdb[,.(pathway,category,subcat,pathway.size)]))[order(pval)]
+       
+     }
     
   }
   
