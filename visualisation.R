@@ -95,6 +95,8 @@ source('emmaplot.R')
 
 CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE,
                        pval_col='padj',effect_col='NES',pathw_col='pathway',
+                       padj_sig_thr=0.1,
+                       padj_sugg_thr=0.25,
                        colors=c("blue", "white", "red"),
                        colors_resol=100,
                        width =7,height = 7,max_color=2){
@@ -121,7 +123,7 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
   
   #add pvalue
   res_gsea1[,padj:=.SD,.SDcols=pval_col]
-  res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<0.05,'*',ifelse(padj<0.25,'.',''))))]
+  res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<padj_sig_thr,'*',ifelse(padj<padj_sugg_thr,'.',''))))]
 
   mat_gseap<-data.frame(dcast(res_gsea1,pathw~comp,value.var ='padjsig'),row.names = 'pathw')
   color_gradient <- colorRampPalette(colors)

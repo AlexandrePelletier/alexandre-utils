@@ -11,14 +11,6 @@ library(data.table)
 #get sim matrix
 
 LeadingEdges<-function(res_fgsea){
-  if(all(c('term','n.overlap','genes.overlap')%in%colnames(res_fgsea))){
-    
-    l_genes<-str_extract_all(res_fgsea$genes.overlap,'[A-Za-z0-9]+')
-    l_genes<-lapply(l_genes, function(x)x[x!='c'])
-    names(l_genes)<-res_fgsea$pathway
-    return(l_genes)
-    
-  }else{
     if(is.character(res_fgsea$leadingEdge)){
       l_genes<-str_extract_all(res_fgsea$leadingEdge,'[A-Za-z0-9]+')
       l_genes<-lapply(l_genes, function(x)x[x!='c'])
@@ -29,10 +21,11 @@ LeadingEdges<-function(res_fgsea){
 
     names(l_genes)<-res_fgsea$pathway
     return(l_genes)
-  }
+}
+
   
  
-}
+
 
 overlap_ratio <- function(x, y) {
   x <- unlist(x)
@@ -141,6 +134,20 @@ add_node_label <- function(p,label.size=label.size,max.overlaps=10) {
   
   return(p)
 }
+FormatEnrichmentRes<-function(x){
+  if(all(c('term','n.overlap')%in%colnames(x))){
+    x[,pathway:=term]
+    x[,size:=n.overlap]
+    if('genes.overlap'%in%colnames(x)){
+      x[,leadingEdge:=genes.overlap]
+    }else{
+      warning('genes.overlap column not present while ORA format')
+    }
+    
+  }
+  return(x)
+  
+}
 
 #main function####
 
@@ -158,28 +165,33 @@ emmaplot<-function(res_fgsea,
   }
   
   if(!is.null(cols_lims)&length(cols)>2){
+    
     if(!(any(cols_lims<0)&any(any(cols_lims>=0)))){
       cols=c('white','red')
     }
   }
 
+
+  res_fgsea<-FormatEnrichmentRes(res_fgsea)
   
-  if(all(c('term','n.overlap')%in%colnames(res_fgsea))){
-    col.var='fold.enrichment'
-    res_fgsea[,pathway:=term]
-    res_fgsea[,size:=n.overlap]
-    
-  }else{
-    col.var='NES'
-    
+  if(is.null(col.var)){
+    if(all(c('term','n.overlap')%in%colnames(res_fgsea))){
+      col.var='fold.enrichment'
+      
+    }else{
+      col.var='NES'
+      
+    }
   }
+
+  
   
   if(!'pathway'%in%colnames(res_fgsea)){
     stop('expected format: fgsea results or overrepresentation results (OR3) format')
   }
   
  
-    if(all(table(res_fgsea[[col.var]])>1)){
+    if(all(table(res_fgsea[[col.var]])>1)|!is.numeric(res_fgsea[[col.var]])){
       
       res_fgsea[,(col.var):=lapply(.SD,as.character),.SDcols=col.var]
       
@@ -263,6 +275,7 @@ GetPathwaysLinks<-function(res_fgsea,
                    min_edge=0.2){
   require('ggrepel')
   
+  res_fgsea<-FormatEnrichmentRes(res_fgsea)
   if(is.null(pathway_names))pathway_names=res_fgsea[order(pval)]$pathway
   
   lelist<-LeadingEdges(res_fgsea[pathway%in%pathway_names])
@@ -292,7 +305,7 @@ GetPathwaysLinks<-function(res_fgsea,
     setnames(pathways_links,new = c('pathway1','pathway2'))
     pathways_links[,weight:=simat[pathway1,pathway2],by=c('pathway1','pathway2')]
     
-    return(pathways_links)
+    return(pathways_links[!is.na(weight)][])
     
   }else{
     stop('only one pathway gave')
@@ -301,26 +314,37 @@ GetPathwaysLinks<-function(res_fgsea,
 }
 
 
-ClusterPathways<-function(x,resolution=1,method='louvain',min_edge=NULL,weights=NULL){
+ClusterPathways<-function(x,resolution=1,method='leiden',min_edge=NULL,weights=NULL){
   require(igraph)
 
+  if(is.null(weights)){
+    if(!'weight'%in%colnames(x)){
+      if(is.null(min_edge)){
+        min_edge=0.2
+      }
+      x<-GetPathwaysLinks(x,min_edge = min_edge)
   
-  if(!'weight'%in%colnames(x)){
-    if(is.null(min_edge)){
-      min_edge=0.2
     }
-    x<-GetPathwaysLinks(x,min_edge = min_edge)
     
   }
+
   
   graph<-graph.data.frame(data.frame(x),directed = F)
+  if(is.null(weights)){
+    weights=igraph::edge_attr(graph,'weight')
+
+  }
   
   
   if(method=='louvain'){
     cl<-cluster_louvain(graph, weights = weights, resolution = resolution)
     
+  }else if (method=='leiden'){
+    cl<-cluster_leiden(graph,objective_function = 'modularity', weights = weights, 
+                       resolution = resolution,n_iterations = 5)
+    
   }else{
-    stop('no other method than louvain implemented yet')
+    
   }
 
   
