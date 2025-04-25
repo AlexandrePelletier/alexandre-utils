@@ -1475,7 +1475,8 @@ GetGTF<-function(gtf='/projectnb/tcwlab/RawData/Genome2.7.9a/hg38/gencode.v26.an
   }
   
 }
-GetGenesGTF<-function(genes,genome='hg38',gtf=NULL,anno_sources=c('ENSEMBL','HAVANA'),feature_types='gene'){
+GetGenesGTF<-function(genes,genome='hg38',gtf=NULL,
+                      anno_sources=c('ENSEMBL','HAVANA'),feature_types='gene'){
   #feature_type : gene, transcript, exon, CDS, UTR, start_codon, stop_codon
   if(genome=='hg38'&is.null(gtf)){
     gtf='/projectnb/tcwlab/RefData/gencode/hg38/gencode.v45.annotation.gtf'
@@ -1522,7 +1523,9 @@ GetGenesGTF<-function(genes,genome='hg38',gtf=NULL,anno_sources=c('ENSEMBL','HAV
   }
   genes_not_found<-setdiff(genes,unique(gtff$gene_name))
   if(length(genes_not_found)>0){
-    warning(paste(genes_not_found,collapse=','),' coordinates not found in ',anno_sources, 'with feature',features ,'. Try with other source/feature')
+    warning(paste(genes_not_found,collapse=','),'
+            coordinates not found in ',anno_sources,
+            'with feature',feature_types ,'. Try with other source/feature')
     warning('available sources: ',paste(unique(gtf$source),collapse = ','))
     warning('available gene features: ',paste(unique(gtf$feature_type),collapse = ','))
     
