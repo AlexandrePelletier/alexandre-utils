@@ -46,6 +46,95 @@ getPval<-function(zscore){
 }
 
 
+#get tstats derived pvalue for independant/explanatory variables X over each outcome variable Y
+#X: Matrix of explanatory variables as columns
+#Y: Matrix of outcomes 
+GetPvalXYMatrices<-function(X,Y){
+ 
+  #rm unique value X
+  non_unique<-apply(X,2, function(x)length(unique(x))>1)
+  if(sum(!non_unique)>0){
+    message(sum(!non_unique),' variable in X with unique value, remove them.')
+  }
+  
+  #rm highly colinear X: R2>0.95
+  correlated<-apply(X,2, function(x)apply(X,2, function(y)cor(x,y)^2>0.64))
+  
+  if(is.null(colnames(correlated))){
+    colnames(correlated)<-paste0('X',1:ncol(correlated))
+    rownames(correlated)<-paste0('X',1:ncol(correlated))
+    
+  }
+  
+  to_keep<-rowSums(correlated)==1
+  if(sum(!to_keep)>0){
+    warning(sum(!to_keep),' variable in X too colinear. keep only the first one')
+    
+    correlated_mat<-correlated[!to_keep,!to_keep]
+    print(correlated_mat)
+    #keep only the first of the groups of correlated
+    cor_var_tokeepi<-c()
+    for(i in 1:nrow(correlated_mat)){
+      correlated_varsi<-which(correlated_mat[,i])
+      if(all(!correlated_varsi%in%cor_var_tokeepi))
+        cor_var_tokeepi<-c(cor_var_tokeepi,i)
+      
+    }
+   
+      cor_var_tokeep<-colnames(correlated_mat)[cor_var_tokeepi]
+      to_keep<-to_keep|colnames(correlated)%in%cor_var_tokeep
+    message(sum(to_keep),' total explanatory variables kept')
+    
+    X<-X[,to_keep]
+    
+  }
+  
+  # Ensure intercept is present
+  X <- cbind(1, X)
+  n <- nrow(X)
+  p <- ncol(X)
+  
+ 
+  # Fit model using .lm.fit for all outcomes at once
+  fit <- .lm.fit(X, Y)
+  
+  # Coefficients matrix (p x m)
+  B <- fit$coefficients  # each column corresponds to an outcome
+  
+  # Residuals matrix (n x m)
+  resid <- Y - X %*% B
+  
+  # Residual variance for each outcome (vector length m)
+  df_resid <- n - p
+  sigma2 <- colSums(resid^2) / df_resid
+  
+  # Precompute (X'X)^(-1)
+  XtX_inv <- solve(crossprod(X))  # p x p
+  
+  # Standard errors: sqrt(diag((X'X)^(-1)) * sigma2) → matrix of (p x m)
+  se <- sqrt(outer(diag(XtX_inv), sigma2))  # outer product to get all SEs
+  
+  # t-values
+  tvals <- B / se
+  
+  # p-values (2-sided)
+  pvals <- 2 * pt(-abs(tvals), df = df_resid)
+  
+  # Add names for clarity
+  rownames(pvals) <- colnames(X)
+  colnames(pvals) <- colnames(Y)
+  
+  pvals
+  
+}
+#MWE
+X<-as.matrix(data.frame(x1=rnorm(10),x2=rnorm(10)))
+X<-cbind(X,X[,1])
+colnames(X)[3]<-'x3'
+Y<-as.matrix(data.frame(y1=rnorm(10),y2=rnorm(10)))
+GetPvalXYMatrices(X,Y)
+
+
 #CategoricalsToDummy
 #inputs: covariates in data.table format
 #outputs: dummy matrix : all categorical factors are transformed to binary (0/1) outcomes
@@ -751,7 +840,7 @@ freadvcf<-function(file){
 #QSUB FILES CREATION####
 
 
-CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
+CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab',modules=NULL,
                         loadBashrc=FALSE,conda_env=NULL,
                         micromamba_env=NULL,
                         cwd='.',
@@ -773,7 +862,10 @@ CreateJobFile<-function(cmd_list,file,proj_name='tcwlab',modules=NULL,
   
   dir.create(file.path(projdir,'logs'),showWarnings = F)
   file_path<-file
-  log_file=file.path(projdir,'logs',paste0(str_remove(filename,'.qsub$'),'.log'))
+  if(is.null(log_file)){
+    log_file=file.path(projdir,'logs',paste0(str_remove(filename,'.qsub$'),'.log'))
+    
+  }
   
   #create the qsub file
   cat('#!/bin/bash -l\n',file = file_path)
@@ -1110,7 +1202,6 @@ CreateJobForPyFile<-function(python_file,proj_name='tcwlab',modules=NULL,
 # eg Rscript rfile.R element1
 # Rscript rfile.R element2
 
-
 CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
                             parallelize=NULL,maxChildJobs=60,
                             proj_name='tcwlab',
@@ -1148,7 +1239,8 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
     
   }else{
   cmds<-lapply(as.character(args[[1]]), function(arg1){
-    log_file=paste0(str_replace(log_file,'.log$','_'),make.names(basename(arg1)),'.log')
+    log_file<<-paste0(str_replace(log_file,'.log$','_'),make.names(tools::file_path_sans_ext(basename(arg1))),'.log')
+    qsub_file<<-str_replace(log_file,'.log$','.qsub')
     cmd<-paste('Rscript',r_file,arg1,paste(unlist(args[-1]),
                                            collapse = ' '),'>>',log_file)
     return(cmd)

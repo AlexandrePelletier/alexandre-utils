@@ -44,7 +44,7 @@ MajiqConfig<-function(mtd_bams,config_file,bam_file_col='bam',
 #output: datatable of all splicing event differential results
 #note: will also call an `diff_spliced` event if dtPSI>10% and all stats test pvalue<0.05 & 
 #`diff_spliced_relaxed` event if dtPSI>5% and at least 3 stats test pvalue<0.05 
-FormatVoilaHet<-function(res_voila,case_name,control_name){
+FormatVoilaHet<-function(res_voila,case_name,control_name,pval_thr=0.05){
   
    
   #first, reformat the PSI columns (containing ';') and take care of harmonizing the dtpsi/HET specific column: 
@@ -53,8 +53,10 @@ FormatVoilaHet<-function(res_voila,case_name,control_name){
 
     #add Heterogen specific information    
     res_long[,dt_median_psi:=median_psi_case-median_psi_control]
-    res_long[,diff_spliced:=abs(dt_median_psi)>0.1&WILCOXON<0.05&TTEST<0.05&TNOM<0.05]
-    res_long[,diff_spliced_relaxed:=abs(dt_median_psi)>0.05&sum(c(WILCOXON<0.05,TTEST<0.05,TNOM<0.05))>1,by='lsv_id']
+    res_long[,diff_spliced:=abs(dt_median_psi)>0.1&WILCOXON<pval_thr&TTEST<pval_thr&TNOM<pval_thr]
+    
+    res_long[,diff_spliced_relaxed:=abs(dt_median_psi)>0.05&sum(c(WILCOXON<pval_thr,TTEST<pval_thr,TNOM<pval_thr))>1,
+             by='lsv_id']
     
   
   
@@ -68,7 +70,7 @@ FormatVoilaDtPsi<-function(res_voila,case_name,control_name){
   
   #then, take care of harmonizing the dtpsi/HET specific column: 
   cols_control=colnames(res_voila)[str_detect(colnames(res_voila),control_name)]
-  cols_case=colnames(res_voila)[str_detect(colnames(res_voila),case_name)&!str_detect(colnames(res_voila),control_name)]
+  cols_case=setdiff(colnames(res_voila)[str_detect(colnames(res_voila),case_name)],cols_control)
   #cols_groups<-c(cols_control,cols_case)
   
   

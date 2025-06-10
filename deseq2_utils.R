@@ -101,10 +101,14 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
                                annot=annot,
                                minSize = minSize,maxSize = maxSize,
                                gseaParam = gseaParam,scoreType=scoreType,eps=eps,
-                               nPermSimple = nPermSimple,...)
+                               nPermSimple = nPermSimple,
+                               rankbased = rankbased,
+                               ...)
       res_gsea[]
       
     },by=group.by]
+    
+    res_fgsea$query<-res_fgsea[[group.by]]#for bacjward compatibility
     
   }else{
     if(is.character(msigdb)){
@@ -167,9 +171,10 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
       stats<-setNames(sign(res_de[[score]])*rank(abs(res_de[[score]])),res_de$gene)
     }else{
       stats<-setNames(res_de[[score]],res_de$gene)
-      print(head(sort(stats,decreasing = T)))
       
     }
+    print(head(sort(stats,decreasing = T)))
+    
       if(div_by_cat){
         msigdb$group<-msigdb$category
       }else{
