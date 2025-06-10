@@ -1240,7 +1240,9 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
   }else{
   cmds<-lapply(as.character(args[[1]]), function(arg1){
     log_file<<-paste0(str_replace(log_file,'.log$','_'),make.names(tools::file_path_sans_ext(basename(arg1))),'.log')
-    qsub_file<<-str_replace(log_file,'.log$','.qsub')
+    qsub_file<<-paste0(str_replace(qsub_file,'.qsub$','_'),
+                       make.names(tools::file_path_sans_ext(basename(arg1))),'.qsub')
+    
     cmd<-paste('Rscript',r_file,arg1,paste(unlist(args[-1]),
                                            collapse = ' '),'>>',log_file)
     return(cmd)
@@ -1252,7 +1254,8 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
   system(paste('head -n 15',r_file))
   
   #pass the argument to createJobFile
-  CreateJobFile(cmds,file = qsub_file,proj_name = proj_name ,
+  CreateJobFile(cmds,file = qsub_file,log_file = log_file,
+                proj_name = proj_name ,
                 modules = modules ,micromamba_env = micromamba_env ,conda_env = conda_env ,
                 nThreads=nThreads,memPerCore=memPerCore,maxHours=maxHours,
                 loadBashrc = loadBashrc,
