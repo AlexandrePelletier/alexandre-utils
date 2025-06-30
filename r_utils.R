@@ -42,7 +42,10 @@ detach_package <- function(pkg, character.only = FALSE)
 # Stats Related Functions ####
 #zscore to pval
 getPval<-function(zscore){
-  return(2 * (1 - pnorm(abs(zscore))))
+  log_p_one_tail <- pnorm(abs(zscore), lower.tail = FALSE, log.p = TRUE)
+  log_p_two_tail <- log(2) + log_p_one_tail  # log(2 * p)
+  p_value_two_tail <- exp(log_p_two_tail)
+  return(p_value_two_tail)
 }
 
 
