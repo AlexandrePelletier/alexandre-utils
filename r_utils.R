@@ -127,12 +127,12 @@ GetPvalXYMatrices<-function(X,Y){
   pvals
   
 }
-#MWE
-X<-as.matrix(data.frame(x1=rnorm(10),x2=rnorm(10)))
-X<-cbind(X,X[,1])
-colnames(X)[3]<-'x3'
-Y<-as.matrix(data.frame(y1=rnorm(10),y2=rnorm(10)))
-GetPvalXYMatrices(X,Y)
+# #MWE
+# X<-as.matrix(data.frame(x1=rnorm(10),x2=rnorm(10)))
+# X<-cbind(X,X[,1])
+# colnames(X)[3]<-'x3'
+# Y<-as.matrix(data.frame(y1=rnorm(10),y2=rnorm(10)))
+# GetPvalXYMatrices(X,Y)
 
 
 #CategoricalsToDummy
@@ -840,7 +840,7 @@ freadvcf<-function(file){
 #QSUB FILES CREATION####
 
 
-CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab',modules=NULL,
+CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modules=NULL,
                         loadBashrc=FALSE,conda_env=NULL,
                         micromamba_env=NULL,
                         cwd='.',
@@ -1204,7 +1204,7 @@ CreateJobForPyFile<-function(python_file,proj_name='tcwlab',modules=NULL,
 
 CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
                             parallelize=NULL,maxChildJobs=60,
-                            proj_name='tcwlab',
+                            proj_name='tcwlab-adsp',
                             modules='R',
                             loadBashrc=FALSE,conda_env=NULL,micromamba_env=NULL,
                             nThreads=4,memPerCore=NULL,maxHours=24){
@@ -1238,11 +1238,14 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
     cmds<-paste('Rscript',r_file,'>>',log_file)
     
   }else{
-  cmds<-lapply(as.character(args[[1]]), function(arg1){
-    log_file<<-paste0(str_replace(log_file,'.log$','_'),make.names(tools::file_path_sans_ext(basename(arg1))),'.log')
-    qsub_file<<-paste0(str_replace(qsub_file,'.qsub$','_'),
-                       make.names(tools::file_path_sans_ext(basename(arg1))),'.qsub')
+    qsub_file0<-qsub_file
+    log_file0<-log_file
     
+  cmds<-lapply(as.character(args[[1]]), function(arg1){
+    qsub_file<<-paste0(str_replace(qsub_file0,'.qsub$','_'),
+                       make.names(tools::file_path_sans_ext(basename(arg1))),'.qsub')
+    log_file<<-paste0(str_replace(log_file0,'.log$','_'),make.names(tools::file_path_sans_ext(basename(arg1))),'.log')
+
     cmd<-paste('Rscript',r_file,arg1,paste(unlist(args[-1]),
                                            collapse = ' '),'>>',log_file)
     return(cmd)
