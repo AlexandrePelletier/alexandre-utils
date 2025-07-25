@@ -91,6 +91,7 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
   if(!is.null(group.by)){
 
     res_fgsea<-res_de[,{
+      message(get(group.by)[1])
       res_gsea<-RunFgseaMsigdb(.SD,score=score,
                                msigdb=msigdb,
                                gene_col=gene_col,
@@ -108,15 +109,16 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
       
     },by=group.by]
     
-    res_fgsea$query<-res_fgsea[[group.by]]#for bacjward compatibility
+    res_fgsea$query<-res_fgsea[[group.by]]#for backward compatibility
     
   }else{
     if(is.character(msigdb)){
+ 
+      msigdb<-fread(msigdb)
       if(is.null(div_by_cat)){
         div_by_cat<-TRUE
         
       }
-      msigdb<-fread(msigdb)
     }else{
       if(is.null(div_by_cat)){
         div_by_cat<-FALSE
@@ -127,7 +129,7 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
 
     
     #automatically found the matching gene column
-    genecol<-which(sapply(msigdb,function(x)length(intersect(x,res_de$gene))>length(unique(msigdb$gene))*0.10))
+    genecol<-which(sapply(msigdb,function(x)length(intersect(x,res_de$gene))>min(c(length(unique(msigdb$gene))*0.10),length(unique(res_de$gene))*0.10)))
     message('using ',colnames(msigdb)[genecol],' column of msigdb reference matching query')
 
     msigdb$gene<-msigdb[[genecol]]
@@ -193,7 +195,7 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
     
     #annot 
      if(annot){
-       res_fgsea<-merge(res_fgsea,unique(msigdb[,.(pathway,category,subcat,pathway.size)]))[order(pval)]
+       res_fgsea<-merge(res_fgsea,unique(msigdb[,.(pathway,category,subcat,pathway.size)]),by='pathway')[order(pval)]
        
      }
     

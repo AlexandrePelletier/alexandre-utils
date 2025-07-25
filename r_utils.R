@@ -832,11 +832,72 @@ MethChangePlot<-function(res_meth,region,limits=NULL,breaks=waiver()){
 
 
 #DATA.TABLE ADD IN
-freadvcf<-function(file){
-  cmd<-paste('zcat',file,'| grep -v "^##"')
+freadvcf<-function(file,tar_compression=FALSE,only_header=FALSE){
+  if(tar_compression){
+    cmd<-paste('tar -xzf',file,'-O | grep -v "^##"')
+    
+  }else{
+    cmd<-paste('zcat',file,'| grep -v "^##"')
+  }
+  
+  # if(file.exists(paste0(file,'.csi'))){
+  #   
+  #   cmd<-paste('bcftools view -H',file)
+  #   header=paste('bcftools view -h',file,'| grep -v "^##"')
+  #   header=system(header,intern = TRUE)|>str_remove('\r$')|>strsplit('\t')|>unlist()
+  # 
+  #   return(fread(cmd=cmd,col.names = header))
+  #   
+  # }
+  
+  if(only_header){
+    cmd<-str_remove(cmd,'-v ')
+    return(system(cmd,intern = TRUE)|>str_remove('\r$'))
+  }
+  
   fread(cmd)
+
 }
 
+#fwritevcf
+#header_file should be a vcf with header 
+fwritevcf<-function(x,file,header,add_to_header=NULL){
+  vcfcols<-c('#CHROM','POS','ID','REF','ALT','QUAL','FILTER','INFO','FORMAT')
+  lacking<-setdiff(vcfcols,colnames(x))
+  
+  if(length(lacking)>0){
+    stop('lacking ',paste(lacking,collapse = ', '),' columns')
+  }
+  
+  #check others cols are genotype only
+  otherscols<-setdiff(colnames(x),vcfcols)
+  
+  cols_geno<-otherscols[sapply(otherscols,function(c)all(x[[c]]|>str_detect('^[0-9.][/|][0-9.]')))]
+  message('found ',length(cols_geno),' samples, removing extra columns')
+  x<-x[,.SD,.SDcols=c(vcfcols,cols_geno)]
+  #add header
+  message('creating header')
+  if(file.exists(header)){
+    header<-freadvcf(header,only_header = TRUE,tar_compression = TRUE)
+  }
+  if(!is.null(add_to_header)){
+    header<-c(header,add_to_header)
+  }
+
+  cat(header,file = file,sep = '\n')
+  #add columns names
+  cols<-paste(c(vcfcols,cols_geno),collapse = '\t')
+  cat(c(cols,'\n'),file = file,sep = '',append = T)
+  
+  fwrite(x,file,append = TRUE,sep = '\t',compress = 'none')
+  
+  if(tools::file_ext(file)=='gz'){
+    bgzip(file)
+  }
+  
+  system(paste('bcftools view',file,'-Ov -o /dev/null'))
+  
+}
 
 
 
@@ -1554,6 +1615,21 @@ TransToVCF<-function(bed_file,bgzip=T,dry_run=FALSE,threads=8){
   
 }
 
+#transtoplink
+TransToPlink<-function(vcf_file){
+  file_pref<-tools::file_path_sans_ext(vcf_file,compression=TRUE)
+  
+  toPlink<-paste('plink',
+               '--vcf',vcf_file,
+               '--make-bed',
+               '--out',file_pref)
+  
+ 
+    system(toPlink)
+  
+}
+
+
 #genomics annotations access####
 
 GetGTF<-function(gtf='/projectnb/tcwlab/RawData/Genome2.7.9a/hg38/gencode.v26.annotation.gtf',features=NULL){
@@ -1685,12 +1761,19 @@ strflip<-function(x){
 #Interaction with bash####
 #bgzip
 #compressed in bed.gz like table
-#input: x: data.table with 1: chr, 2: start, 3: end
-#bgz_file=  bed.gz filename
+#input: x: data.table with 1: chr, 2: start, 3: end; OR bgz_file path to create
+#bgz_file=  if x data.table, bed.gz filename
 #output; bed.gz file compressed with bgzip and indexed with tabix
-bgzip<-function(x,bgz_file,sort_coord=FALSE,col.names=TRUE,add_header_of=NULL){
+bgzip<-function(x,bgz_file=NULL,sort_coord=TRUE,col.names=TRUE,add_header_of=NULL){
   require('data.table')
+  if(is.null(bgz_file)|is.data.frame(x)){
+    bgz_file<-x
+    
+  }
+  
   bed_file<-tools::file_path_sans_ext(bgz_file)
+  message('bgzip compression of ',bed_file)
+  
   if(sort_coord)
     setorderv(x,cols = colnames(x)[1:2],order = 1)
   
@@ -1701,12 +1784,14 @@ bgzip<-function(x,bgz_file,sort_coord=FALSE,col.names=TRUE,add_header_of=NULL){
     cmd=paste('bcftools head', add_header_of,'>',bed_file)
     system(cmd)
   }
-  fwrite(x,bed_file,sep='\t',col.names = col.names,append = append)
+  if(!file.exists(bed_file)|is.data.frame(x)){
+    fwrite(x,bed_file,sep='\t',col.names = col.names,append = append)
+  }
+  
   system(paste('bgzip -f',bed_file))
   system(paste('tabix',bgz_file))
   system(paste('rm -f',bed_file))
   message(bgz_file,' created')
-  return(bgz_file)
+  invisible(bgz_file)
   
 }
-

@@ -1,6 +1,6 @@
 #Functions for PPI analysis (StringDB)
 #StringDB analysis ####
-#ppiNeighbors
+#ppiNeighbors: return all neighbors of some genes in the ppi
 #input : genes: vector of genes to get neighboorood genes based on STRINGdb
 #combined_score.thr: minimum combined_score.thr to be considered as neighbour 
 ppiNeighbors<-function(genes,ppi='/projectnb/tcwlab/RefData/STRINGdb/9606.protein.links.detailed.v12.0_reformat.annot.csv.gz',
@@ -18,10 +18,10 @@ ppiNeighbors<-function(genes,ppi='/projectnb/tcwlab/RefData/STRINGdb/9606.protei
     setnames(neighb,
              c('protein1','protein2'),
              c('protein_id','neighbor_id'))
-    return(neighb)
+    return(unique(neighb))
     
   }))
-  return(neighbs)
+  return(unique(neighbs))
   
 }
 
@@ -73,7 +73,7 @@ PlotString<-function(genes,ppi='/projectnb/tcwlab/RefData/STRINGdb/9606.protein.
         stop('cannot find gene column of the differential results automatically, need to specify gene_col')
       }
     }
-    net %v% stat_col = res_depf[network.vertex.names(net),on=gene_col][[stat_col]]
+    net %v% stat_col = res_de[network.vertex.names(net),on=gene_col][[stat_col]]
     
   }else{
     stat_col=NULL
@@ -88,13 +88,14 @@ PlotString<-function(genes,ppi='/projectnb/tcwlab/RefData/STRINGdb/9606.protein.
     geom_nodetext_repel(aes(label=ifelse(vertex.names%in%genes_to_display,
                                          vertex.names,'')))+
     scale_size(range = c(0,2.5), limits = size_limits)
-  
-  if(is.numeric(res_depf[[stat_col]])){
-    p<-p+scale_color_gradient2(low = 'blue3',mid = 'white',
-                              high='red3',midpoint = 0,
-                              limits=color_limits)
-    
-    
+  if(!is.null(res_de)){
+    if(is.numeric(res_de[[stat_col]])){
+      p<-p+scale_color_gradient2(low = 'blue3',mid = 'white',
+                                 high='red3',midpoint = 0,
+                                 limits=color_limits)
+      
+      
+    }
   }else{
     p<-p+scale_color_manual(values = color_limits)
     

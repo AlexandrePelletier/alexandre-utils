@@ -7,6 +7,69 @@ require(data.table)
 
 source<-function(file,chdir=TRUE)base::source(file,chdir = chdir)
 
+#CompZ: create heatmap with zscore comparing different group for same covariates
+CompZ<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
+                colors=c("blue", "white", "red"),
+                colorlim=10,color_range=NULL,
+                cluster_cols=TRUE,
+                fontsize_row = 7,cellwidth=12,
+                fontsize_number = 10,
+                show_rownames=TRUE,
+                show_pval=TRUE,
+                title=NA,
+                FDR_thr=0.1,
+                show_several_stars=FALSE){
+  x<-copy(x)
+  
+  setnames(x,covcol,'cov')
+  setnames(x,zcol,'zscore')
+  setnames(x,group.by,'group')
+  
+  x[,zscore:=ifelse(abs(zscore)>colorlim,sign(zscore)*colorlim,zscore)]
+  
+  matz<-dcast(x,cov~group,value.var ='zscore')|>data.frame(row.names = 'cov')
+  matz[is.na(matz)]<-0
+  
+  if(show_pval){
+    if(show_several_stars){
+      x[,padjsig:=lapply(.SD,function(x)ifelse(x<0.001,'***',ifelse(x<0.01,'**',ifelse(x<FDR_thr,'*','')))),.SDcols=pvalcol]
+    }else{
+      x[,padjsig:=lapply(.SD,function(x)ifelse(x<FDR_thr,'*','')),.SDcols=pvalcol]
+    }
+ 
+    matp<-dcast(x,cov~group,value.var ='padjsig')|>data.frame(row.names = 'cov')
+    
+  }
+  
+
+  color_gradient <- colorRampPalette(colors)
+  if(is.null(color_range)){
+    color_range<-c(-max(abs(matz),na.rm = T),max(abs(matz),na.rm = T))
+    
+  }else{
+    mat_dep<-TRUE
+    
+  }
+  
+  col_breaks<-c(((color_range[1]*100):(color_range[2]*100))/100)
+  colors=color_gradient(length(col_breaks)-1)
+  
+  return(pheatmap::pheatmap(matz,
+                            breaks =col_breaks,
+                            color=colors,
+                            fontsize_row = fontsize_row ,
+                            show_rownames=show_rownames,
+                            main=title,
+                            display_numbers = matp,
+                            cluster_cols = cluster_cols,
+                            number_color = 'white',
+                            cellwidth =cellwidth,
+                            fontsize_number = fontsize_number ))
+  
+  
+  
+}
+
 #DIFFERENTIAL EXPRESSION RESULTS####
 #CompDEGs: HEATMAPS comparing DEGs of different groups/comparison
 #INPUT:
@@ -98,8 +161,9 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
                        padj_sig_thr=0.1,
                        padj_sugg_thr=0.25,
                        colors=c("blue", "white", "red"),
+                       white_thr=0.5,
                        colors_resol=100,
-                       width =7,height = 7,max_color=2){
+                       width =7,height = 7,max_color=2,cellwidth=16){
   require('pheatmap')
   require('data.table')
   res_gsea1<-copy(res_gsea_or_or)
@@ -124,7 +188,7 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
   #add pvalue
   res_gsea1[,padj:=.SD,.SDcols=pval_col]
   res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<padj_sig_thr,'*',ifelse(padj<padj_sugg_thr,'.',''))))]
-
+  res_gsea1[is.na(padj),padjsig:='']
   mat_gseap<-data.frame(dcast(res_gsea1,pathw~comp,value.var ='padjsig'),row.names = 'pathw')
   color_gradient <- colorRampPalette(colors)
   
@@ -132,14 +196,14 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
     #if(is.null(revert_color))revert_color=TRUE
     
     col_breaks<-c((-(colors_resol*max_color):(colors_resol*max_color))/colors_resol)
-    col_breaks<-col_breaks[col_breaks>0.5|col_breaks<(-0.5)]
+    col_breaks<-col_breaks[col_breaks>white_thr|col_breaks<(-white_thr)]
     #if(is.null(palette_name))palette_name='RdBu'
 
   
   }else{
     #if(is.null(revert_color))revert_color=FALSE
     col_breaks<-0:(colors_resol*max_color)/colors_resol
-    col_breaks<-col_breaks[col_breaks>0.5|col_breaks<(-0.5)]
+    col_breaks<-col_breaks[col_breaks>white_thr|col_breaks<(-white_thr)]
     
     #if(is.null(palette_name))palette_name='Reds'
 
@@ -173,7 +237,7 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
                  display_numbers = mat_gseap[rownames(mat_gsea),colnames(mat_gsea)],
                  number_color = 'white',
                  cluster_cols = T,
-                 cellwidth =16,
+                 cellwidth =cellwidth,
                  annotation_col = mtd_compa,
                  fontsize_number = 10))
   

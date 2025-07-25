@@ -308,47 +308,56 @@ GetPathwaysLinks<-function(res_fgsea,
     return(pathways_links[!is.na(weight)][])
     
   }else{
-    stop('only one pathway gave')
+    warning('only one pathway gave')
+    return(NULL)
     
   }
 }
 
 
-ClusterPathways<-function(x,resolution=1,method='leiden',min_edge=NULL,weights=NULL){
+ClusterPathways<-function(x,resolution=1,method='leiden',weights=NULL,min_edge=0.2){
   require(igraph)
-
-  if(is.null(weights)){
-    if(!'weight'%in%colnames(x)){
-      if(is.null(min_edge)){
-        min_edge=0.2
+  x<-FormatEnrichmentRes(x)
+  if(length(unique(x$pathway))>1){
+    if(is.null(weights)){
+      if(!'weight'%in%colnames(x)){
+        # if(is.null(min_edge)){
+        #   min_edge=0.2
+        # }
+        links<-GetPathwaysLinks(x,min_edge = min_edge)
+        
       }
-      x<-GetPathwaysLinks(x,min_edge = min_edge)
-  
+      
     }
     
-  }
-
-  
-  graph<-graph.data.frame(data.frame(x),directed = F)
-  if(is.null(weights)){
-    weights=igraph::edge_attr(graph,'weight')
-
-  }
-  
-  
-  if(method=='louvain'){
-    cl<-cluster_louvain(graph, weights = weights, resolution = resolution)
     
-  }else if (method=='leiden'){
-    cl<-cluster_leiden(graph,objective_function = 'modularity', weights = weights, 
-                       resolution = resolution,n_iterations = 5)
+    graph<-graph.data.frame(data.frame(links),directed = F)
+    if(is.null(weights)){
+      weights=igraph::edge_attr(graph,'weight')
+      
+    }
+    
+    
+    if(method=='louvain'){
+      cl<-cluster_louvain(graph, weights = weights, resolution = resolution)
+      
+    }else if (method=='leiden'){
+      cl<-cluster_leiden(graph,objective_function = 'modularity', weights = weights, 
+                         resolution = resolution,
+                         n_iterations = 5)
+      
+    }else{
+      stop('only leiden and louvain method implemented yet')
+    }
+    
+    return(merge(data.table(pathway=cl$names,cluster=cl$membership),
+                 x,by='pathway',all.y=TRUE))
     
   }else{
-    
+    warning('only one pathway provided, return NA')
+    return(x[,cluster:=NA])
   }
 
-  
-  return(data.table(pathway=cl$names,cluster=cl$membership))
 }
 
 
