@@ -13,11 +13,11 @@ CompZ<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
                 colorlim=10,color_range=NULL,
                 cluster_cols=TRUE,
                 fontsize_row = 7,cellwidth=12,
-                fontsize_number = 10,
+                fontsize_number = 12,
                 show_rownames=TRUE,
                 show_pval=TRUE,
                 title=NA,
-                FDR_thr=0.1,
+                FDR_thr=0.05,suggestive_thr=NULL,
                 show_several_stars=FALSE){
   x<-copy(x)
   
@@ -32,9 +32,13 @@ CompZ<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
   
   if(show_pval){
     if(show_several_stars){
-      x[,padjsig:=lapply(.SD,function(x)ifelse(x<0.001,'***',ifelse(x<0.01,'**',ifelse(x<FDR_thr,'*','')))),.SDcols=pvalcol]
+      x[,padjsig:=lapply(.SD,function(x)ifelse(x<0.001,'***',ifelse(x<0.01,'**',ifelse(x<=FDR_thr,'*','')))),.SDcols=pvalcol]
     }else{
-      x[,padjsig:=lapply(.SD,function(x)ifelse(x<FDR_thr,'*','')),.SDcols=pvalcol]
+      x[,padjsig:=lapply(.SD,function(x)ifelse(x<=FDR_thr,'*','')),.SDcols=pvalcol]
+    }
+    if(!is.null(suggestive_thr)){
+      x[,padjsig:=ifelse(.SD[[1]]<=suggestive_thr&.SD[[1]]>FDR_thr,'.',padjsig),.SDcols=pvalcol]
+      
     }
  
     matp<-dcast(x,cov~group,value.var ='padjsig')|>data.frame(row.names = 'cov')
@@ -89,6 +93,8 @@ CompDEGs<-function(res_des,
                    col_range=c(-2.5,2.5),
                    colors=c("blue", "white", "red"),
                    colors_resol=100,
+                   na_value=0,
+                   show_NA=TRUE,
                    show_rownames=TRUE,
                    cluster_cols=TRUE,
                    show_pval=TRUE,
@@ -109,12 +115,16 @@ CompDEGs<-function(res_des,
   mat_de<-data.frame(dcast(res_des1,
                              gene~comparison,value.var =FC_column),row.names = 'gene')
   
-  mat_de[is.na(mat_de)]<-0
+  mat_de[is.na(mat_de)]<-na_value
   if(show_pval){
     #add pvalue
     res_des1[,padjsig:=lapply(.SD,function(x)ifelse(x<0.001,'***',ifelse(x<0.01,'**',ifelse(x<0.05,'*',ifelse(x<0.25,'.',''))))),.SDcols=pval_column]
     
     mat_dep<-data.frame(dcast(res_des1,gene~comparison,value.var ='padjsig'),row.names = 'gene')
+    if(!show_NA){
+      mat_dep[is.na(mat_dep)]<-''
+      
+    }
     
   }else{
     mat_dep<-FALSE
@@ -163,6 +173,8 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
                        colors=c("blue", "white", "red"),
                        white_thr=0.5,
                        colors_resol=100,
+                       na_value=0,
+                       show_NA=TRUE,
                        width =7,height = 7,max_color=2,cellwidth=16){
   require('pheatmap')
   require('data.table')
@@ -183,6 +195,9 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
   
   mat_gsea<-data.frame(dcast(res_gsea1,
                            pathw~comp,value.var =effect_col),row.names = 'pathw')
+  
+  mat_gsea[is.na(mat_gsea)]<-na_value
+  
 
   
   #add pvalue
@@ -190,6 +205,12 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
   res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<padj_sig_thr,'*',ifelse(padj<padj_sugg_thr,'.',''))))]
   res_gsea1[is.na(padj),padjsig:='']
   mat_gseap<-data.frame(dcast(res_gsea1,pathw~comp,value.var ='padjsig'),row.names = 'pathw')
+  
+  if(!show_NA){
+    mat_gseap[is.na(mat_gseap)]<-''
+    
+  }
+  
   color_gradient <- colorRampPalette(colors)
   
   if(all(c(-1,1)%in%unique(sign(res_gsea1[[effect_col]])))){

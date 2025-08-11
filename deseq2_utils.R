@@ -89,9 +89,12 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
   
   
   if(!is.null(group.by)){
-
-    res_fgsea<-res_de[,{
-      message(get(group.by)[1])
+    res_de[,n.gene.compa:=.N,by=group.by]
+    res_fgsea<-res_de[n.gene.compa>10,{
+      message(get(group.by[1])[1])
+      if(length(group.by)>1)
+        message(get(group.by[2])[1])
+      
       res_gsea<-RunFgseaMsigdb(.SD,score=score,
                                msigdb=msigdb,
                                gene_col=gene_col,
@@ -109,7 +112,7 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
       
     },by=group.by]
     
-    res_fgsea$query<-res_fgsea[[group.by]]#for backward compatibility
+    res_fgsea[,query:=apply(.SD,1,paste,collapse='.'),.SDcols=group.by]#for backward compatibility
     
   }else{
     if(is.character(msigdb)){
