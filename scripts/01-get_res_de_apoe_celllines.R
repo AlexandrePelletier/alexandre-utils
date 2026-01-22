@@ -66,6 +66,11 @@ res_de_mouse<-res_de_pop
 fwrite(res_de_mouse,fp(out,'res_deseq2_APOE_Mouse.csv'))
 
 
+#check some genes
+res_de<-fread(fp(out,'res_deseq2_APOE_isogenics.csv'))
+res_de[padj<0.1]
 
-
+res_de[gene_name%in%c('SERPINA3','LCN2','NGAL')]
+ENSG00000148346
+res_de[str_extract(V1,'ENSG[0-9]+')=='ENSG00000148346']
 

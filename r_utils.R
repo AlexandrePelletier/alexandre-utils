@@ -7,8 +7,10 @@ message(getDTthreads(),' threads available for data.table')
 
 library("stringr")
 library("ggplot2")
-#library("ggrepel")
+library("ggrepel")
 library("patchwork")
+library('qs')
+
 #library("here")
 #library('qs')
 
@@ -21,6 +23,7 @@ ps<-function(...,sep="",collapse = NULL)paste(...,sep=sep,collapse = collapse)
 source<-function(file,chdir=TRUE)base::source(file,chdir = chdir)
 
 qs<-function()system('qstat -u adpelle1')
+
 
 
 #detach_package
@@ -176,6 +179,16 @@ GetVarPCs<-function(pca,rngPCs="all"){
 
 
 #Reformatting classical R data/results ####
+TidyPathwayNames<-function(PATHWAYS,remove_gs_source=FALSE,wrap_text_size=80){
+  tidypathways<-PATHWAYS|>str_replace('_',':')|>str_replace_all('_',' ')|>str_to_title()|>str_wrap(width = wrap_text_size)
+  if(remove_gs_source){
+    return(tidypathways|>str_remove('[A-Za-z]+:'))
+  }else{
+    return(tidypathways)
+  }
+}
+
+
 UniqueClean<-function(x,key_cols='sample_id',pattern_to_exclude=NULL){
   #keep only unconstant variables
   nums_to_keep<-names(which(x[,sapply(.SD,function(y)(!all(is.na(y)))&var(y,na.rm = T)!=0)&length(unique(y))!=.N,.SDcols=is.numeric]))
@@ -648,7 +661,7 @@ seqid<-function(x,only_num=FALSE){
   if(only_num){
     str_extract(x,'[0-9]+')|>as.numeric()
   }else{
-    sapply(x,function(x)strsplit(x,"\\.|-|:|_|,|\\[|\\]")[[1]][1])
+    sapply(as.character(x),function(x)strsplit(x,"\\.|-|:|_|,|\\[|\\]")[[1]][1])
     
   }
 }
@@ -909,7 +922,8 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modu
                         micromamba_env=NULL,
                         cwd='.',
                         nThreads=NULL,memPerCore=NULL,maxHours=24,
-                        parallelize=FALSE,maxChildJobs=60){
+                        parallelize=FALSE,maxChildJobs=60,
+                        additional_cmds=NULL){
   
   template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
   template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
@@ -942,13 +956,17 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modu
   qlog<-paste('-o ',log_file)
   if(!is.null(nThreads)){
     nThreads_opt=paste('-pe omp',nThreads)
+    # if(micromamba_env=='pyscenic'){
+    #   
+    #  
+    # }
   }else{
     nThreads_opt=NULL
     
   }
   
   if(!is.null(memPerCore)){
-    memPerCore_opt=paste0('-l mem_per_core=',memPerCore)
+    memPerCore_opt=paste0('-l mem_per_core=',memPerCore,'G')
   }else{
     memPerCore_opt=NULL
     
@@ -959,9 +977,11 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modu
     script_id=str_extract(filename,'^[0-9A-Za-z]+')
     scripts_dir<-file.path(projdir,'scripts')
     childs_dir<-file.path(scripts_dir,paste0(script_id,'childs'))
+    childslog_dir<-file.path(projdir,'logs',paste0(script_id,'childs'))
     
    if(!dir.exists(childs_dir))dir.create(childs_dir,recursive = T)
-
+    if(!dir.exists(childslog_dir))dir.create(childslog_dir,recursive = T)
+    
     #add the main job parameters
     cat( '#Parameters of the Jobs :',file = file_path,append = T)
     cat( c('\n',proj_name_opt,CombStdOutErr_opt,maxHours_opt,qlog),
@@ -990,7 +1010,9 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modu
     cmds<-sapply(1:n_jobs,function(i){
       
       cmds_child<-cmd_list_jobs[[i]]
+      logfile_child<-file.path(childslog_dir,basename(child_jobfiles[i])|>str_replace('.qsub','.log'))
       CreateJobFile(cmd_list =cmds_child,file = child_jobfiles[i],
+                    log_file=logfile_child,
                     cwd = cwd,
                     nThreads = nThreads ,proj_name = proj_name ,
                     loadBashrc = loadBashrc,modules = modules,conda_env = conda_env,micromamba_env = micromamba_env,
@@ -1026,7 +1048,8 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modu
     #add the core job parameters
   cat( '#Parameters of the Jobs :',file = file_path,append = T)
   cat( c('\n',proj_name_opt,CombStdOutErr_opt,maxHours_opt,qlog,nThreads_opt,memPerCore_opt),file = file_path,append = T,sep = '\n#$')
-  cat( '\n',file = file_path,append = T,sep = '\n')
+  cat( c('\n',additional_cmds,'\n'),
+       file = file_path,append = T,sep = '\n')
   
   #add the module to loads
   if(!is.null(modules)){
@@ -1153,111 +1176,114 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modu
 
 
 
-CreateJobForPyFile<-function(python_file,proj_name='tcwlab',modules=NULL,
-                        loadBashrc=FALSE,conda_env=NULL,
-                        micromamba_env=NULL,
-                        nThreads=4,memPerCore=NULL,maxHours=24){
-  template_header='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_header.txt'
-  template_tail='/projectnb/tcwlab/LabMember/adpelle1/utils/template/qsub_file_tail.txt'
+
+#CreateJobForPyfile~~~~
+#create job to execute an R file using Rscript rfile.R [args]
+#Arguments:
+#args: should be a list of argument to pass to Rscript command. If the first argument is a vector, will create one Rscript command by element of this vector
+# eg Rscript rfile.R element1
+# Rscript rfile.R element2
+
+CreateJobForPyfile<-function(py_file,qsub_file=NULL,args=NULL,
+                            parallelize=NULL,maxChildJobs=60,
+                            proj_name='tcwlab-adsp',
+                            modules=NULL,
+                            loadBashrc=FALSE,conda_env=NULL,micromamba_env=NULL,
+                            nThreads=4,memPerCore=NULL,maxHours=24,additional_cmds=NULL){
   
-  filename<-basename(python_file)
-  projdir<-ifelse(str_detect(python_file,'scripts/'),dirname(dirname(python_file)),dirname(python_file))
+  if(is.null(parallelize)){
+    parallelize=FALSE
+    if(!is.null(args)){
+      if(length(args[[1]])>1){
+        parallelize=TRUE
+      }
+    }
+  }
   
+  if(is.null(qsub_file)){
+    qsub_file<-str_replace(py_file,'\\.py$','.qsub')
+  }
   
-  #create qsub file
-  qsub_file<-str_replace(python_file,'\\.py$','.qsub')
-  cat('#!/bin/bash -l\n',file = qsub_file)
+  filename<-basename(py_file)
+  projdir<-dirname(py_file)
+  while(str_detect(projdir,'scripts')){
+    projdir<-dirname(projdir)
+  }
   
   #create log file
   dir.create(file.path(projdir,'logs'),showWarnings = F)
   log_file=file.path(projdir,'logs',str_replace(filename,'\\.py$','.log'))
   
+  #cmds
+  cmds<-c()
   
-  #add the job parameters
-  proj_name<-paste('-P ',proj_name)
-  CombStdOutErr<-'-j y'
-  maxHours<-paste0('-l h_rt=',maxHours,':00:00')
-  qlog<-paste('-o ',log_file)
-  if(!is.null(nThreads))nThreads=paste('-pe omp',nThreads)
-  if(!is.null(memPerCore))memPerCore=paste0('-l mem_per_core=',memPerCore)
+
   
-  cat( '#Parameters of the Jobs :',file = qsub_file,append = T)
-  cat( c('\n',proj_name,CombStdOutErr,maxHours,qlog,nThreads,memPerCore),file = qsub_file,append = T,sep = '\n#$')
-  cat( '\n',file = qsub_file,append = T,sep = '\n')
-  
-  #add the module to loads
-  if(!is.null(modules)){
-    modules<-ifelse(modules=='R','R/4.2.1',modules)
+  #create the Rscript cmds to exec
+  if(is.null(args)){
     
-    if('gatk'%in%modules){
+    
+    cmds<-paste('python',py_file,'>>',log_file)
+    
+    
+  }else{
+    qsub_file0<-qsub_file
+    log_file0<-log_file
+    
+    args<-lapply(args, function(arg)sapply(arg,function(x)paste0("'",x,"'")))
+    
+    cmds<-lapply(as.character(args[[1]]), function(arg1){
       
-      modules<-c(modules[modules!='gatk'],
-                 'miniconda/23.1.0',
-                 'java/17.0.8',
-                 'gatk/4.4.0.0')
+      params_name<-make.names(tools::file_path_sans_ext(basename(arg1)))
+      i<-1
+      while(length(args)>i){
+        i<-i+1
+        argsup<-args[[i]]
+        
+        params_name<-paste(params_name,make.names(tools::file_path_sans_ext(basename(argsup))),sep='_')
+        
+      }
       
-      conda_env<-union(conda_env,'/share/pkg.8/gatk/4.4.0.0/install/gatk-4.4.0.0')
+      qsub_file<<-paste0(str_replace(qsub_file0,'.qsub$','_'),
+                         params_name,'.qsub')
+      
+      
+      log_file<<-paste0(str_replace(log_file0,'.log$','_'),params_name,'.log')
+      
+      cmd<-paste('python',py_file,arg1,paste(unlist(args[-1]),
+                                             collapse = ' '),'>>',log_file)
+      return(cmd)
+    })
+    
+    names(cmds)<-make.names(tools::file_path_sans_ext(basename(as.character(args[[1]]))))
+    
+    #identify the commands with supplemental parameters if present
+    i<-1
+    while(length(args)>i){
+      i<-i+1
+      argsup<-args[[i]]
+      
+      names(cmds)<-paste(names(cmds),make.names(tools::file_path_sans_ext(basename(argsup))),sep='_')
       
     }
     
-    cat( '#Modules to load:',file = qsub_file,append = T)
-    cat( c('\n',modules),file = qsub_file,append = T,sep = '\nmodule load ')
-    cat( '\n',file = qsub_file,append = T,sep = '\n')
-    
   }
-  #load .bashrc
-  if(loadBashrc){
-    cat( '# loading of bashrc profile:',file = qsub_file,append = T)
-    cat('\n source $HOME/.bashrc',file = qsub_file,append = T)
-    cat( '\n',file = qsub_file,append = T,sep = '\n')
-  }
-  
-  #activate conda environment 
-  if(!is.null(conda_env)){
-    cat( '#Conda environment activation:',file = qsub_file,append = T)
-    cat( c('\n',conda_env),file = qsub_file,append = T,sep = '\nconda activate ')
-    cat( '\n',file = qsub_file,append = T,sep = '\n')
-    
-  }
-  
-  #activate micromamba environment 
-  if(!is.null(micromamba_env)){
-    cat( '#Micromamba environment activation:',file = qsub_file,append = T)
-    cat( c('\n',micromamba_env),file = qsub_file,append = T,sep = '\nmicromamba activate ')
-    cat( '\n',file = qsub_file,append = T,sep = '\n')
-    
-  }
-  
-
-  #add the header
-  system(paste('cat',template_header,'>>',qsub_file))
-  
-  
-  #add the Python script to exec
-  cmd<-paste('python',python_file,'>>',log_file)
-  
-  cat( cmd,file = qsub_file,append = T,sep = '\n')
-  cat( '\n',file = qsub_file,append = T,sep = '\n')
-  
-  #add the tail
-  system(paste('cat',template_tail,'>>',qsub_file))
-  
-  #show the file header
-  message('qsub file created at ',qsub_file)
-  message('header:')
-  system(paste('head -n 15',qsub_file))
-  
-  #show the  bash command
-  message('the bash command to execute:')
-  cat( cmd,sep = '\n')
-  
   #show the first R lines
-  message('the 15 firsts lines of Python scripts to execute:')
-  system(paste('head -n 15',python_file))
+  message('the 15 firsts python lines to executes')
+  system(paste('head -n 15',py_file))
   
-  
+  #pass the argument to createJobFile
+  CreateJobFile(cmds,file = qsub_file,log_file = log_file,
+                proj_name = proj_name ,
+                modules = modules ,micromamba_env = micromamba_env ,conda_env = conda_env ,
+                nThreads=nThreads,memPerCore=memPerCore,maxHours=maxHours,
+                loadBashrc = loadBashrc,
+                parallelize = parallelize,
+                maxChildJobs = maxChildJobs,
+                additional_cmds=additional_cmds)
   
 }
+
 
 #CreateJobForRfile~~~~
 #create job to execute an R file using Rscript rfile.R [args]
@@ -1269,9 +1295,10 @@ CreateJobForPyFile<-function(python_file,proj_name='tcwlab',modules=NULL,
 CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
                             parallelize=NULL,maxChildJobs=60,
                             proj_name='tcwlab-adsp',
-                            modules='R',
+                            modules='R/4.4.0',
                             loadBashrc=FALSE,conda_env=NULL,micromamba_env=NULL,
-                            nThreads=4,memPerCore=NULL,maxHours=24){
+                            nThreads=4,memPerCore=NULL,maxHours=24,
+                            additional_cmds=NULL){
   
   if(is.null(parallelize)){
     parallelize=FALSE
@@ -1302,18 +1329,48 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
     cmds<-paste('Rscript',r_file,'>>',log_file)
     
   }else{
+    
     qsub_file0<-qsub_file
     log_file0<-log_file
     
+    args<-lapply(args, function(arg)sapply(arg,function(x)paste0("'",x,"'")))
+    
   cmds<-lapply(as.character(args[[1]]), function(arg1){
+    
+    
+   
+    params_name<-make.names(tools::file_path_sans_ext(basename(arg1)))
+    i<-1
+    while(length(args)>i){
+      i<-i+1
+      argsup<-args[[i]]
+      
+      params_name<-paste(params_name,make.names(tools::file_path_sans_ext(basename(argsup))),sep='_')
+      
+    }
+    
     qsub_file<<-paste0(str_replace(qsub_file0,'.qsub$','_'),
-                       make.names(tools::file_path_sans_ext(basename(arg1))),'.qsub')
-    log_file<<-paste0(str_replace(log_file0,'.log$','_'),make.names(tools::file_path_sans_ext(basename(arg1))),'.log')
+                       params_name,'.qsub')
+    
+    
+    log_file<<-paste0(str_replace(log_file0,'.log$','_'),params_name,'.log')
 
     cmd<-paste('Rscript',r_file,arg1,paste(unlist(args[-1]),
                                            collapse = ' '),'>>',log_file)
     return(cmd)
   })
+  
+  names(cmds)<-make.names(tools::file_path_sans_ext(basename(as.character(args[[1]]))))
+  
+  #identify the commands with supplemental parameters if present
+  i<-1
+  while(length(args)>i){
+    i<-i+1
+    argsup<-args[[i]]
+    
+    names(cmds)<-paste(names(cmds),make.names(tools::file_path_sans_ext(basename(argsup))),sep='_')
+    
+  }
   
   }
   #show the first R lines
@@ -1327,7 +1384,8 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
                 nThreads=nThreads,memPerCore=memPerCore,maxHours=maxHours,
                 loadBashrc = loadBashrc,
                 parallelize = parallelize,
-                maxChildJobs = maxChildJobs)
+                maxChildJobs = maxChildJobs,
+                additional_cmds=additional_cmds)
   
 }
 

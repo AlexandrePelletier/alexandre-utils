@@ -39,7 +39,7 @@ BamDownSample<-function(bams,out_dir=NULL,prop=0.01){
 ConvertBamToBed<-function(bams,out_dir=NULL,job_file=NULL,
                           job_name = 'bamtobed',
                           nThreads=NULL,parallelize=FALSE,
-                          maxChildJobs=40,wait_job=TRUE,wait_for=NULL){
+                          maxChildJobs=40,wait_job=TRUE,wait_for=NULL,dryrun=FALSE){
   
   bam_dir=unique(dirname(bams))
   if(is.null(out_dir)){
@@ -77,8 +77,11 @@ ConvertBamToBed<-function(bams,out_dir=NULL,job_file=NULL,
                   loadBashrc = T,modules = c('bedtools'),
                   nThreads = nThreads,parallelize =parallelize,maxChildJobs=maxChildJobs )
     
-    jobid<-RunQsub(job_file,job_name = job_name,wait_for = wait_for)
-    if(wait_job)WaitQsub(job_file,jobid =jobid )
+    if(!dryrun){
+      jobid<-RunQsub(job_file,job_name = job_name,wait_for = wait_for)
+      if(wait_job)WaitQsub(job_file,jobid =jobid )
+    }
+    
   }
   
   

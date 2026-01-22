@@ -51,7 +51,7 @@ get_similarity_matrix <- function(leading_edge_list) {
  
 
 # get graph of sim
-get_igraph <- function(res_fgsea, simmat,leading_edge_list,
+get_igraph <- function(res_fgsea, simmat,leading_edge_list,node_size=NULL,
                        pathway_names=NULL, min_edge=0.2, col.var=NULL) {
   if(any(duplicated(res_fgsea$pathway)))stop('error: duplicated pathways')
   
@@ -64,19 +64,25 @@ get_igraph <- function(res_fgsea, simmat,leading_edge_list,
   wd <- wd[!is.na(wd[,3]),]
   
   g <- graph.data.frame(wd[, -3], directed=FALSE)
-  E(g)$width <- sqrt(wd[, 3] * 5) 
   
+  E(g)$width <- wd[, 3] # * 5*0.2/min_edge
   
   
   # Use similarity as the weight(length) of an edge
   E(g)$weight <- wd[, 3]
   g <- igraph::delete.edges(g, E(g)[wd[, 3] < min_edge])
-  
+
   res_fgseaf<-res_fgsea[V(g)$name,on='pathway']
   #idx <- unlist(sapply(V(g)$name, function(x) which(x == res_fgseaf$pathway)))
-  cnt <- sapply(leading_edge_list, length)
-  
-  V(g)$size <- cnt[V(g)$name]
+  if(is.null(node_size)){
+    cnt <- sapply(leading_edge_list, length)
+    
+    V(g)$size <- cnt[V(g)$name]
+  }else{
+    V(g)$size <- node_size[V(g)$name]
+    
+  }
+
   
   if(!is.null(col.var)){
     colVar <- res_fgseaf[V(g)$name, on='pathway'][[col.var]]
@@ -89,7 +95,7 @@ get_igraph <- function(res_fgsea, simmat,leading_edge_list,
 
 
 #plot the graphs
-add_category_nodes <- function(p,col.var,cols=c('blue','white','red'),cols_lims=NULL) {
+add_category_nodes <- function(p,col.var,cols=c('blue','white','red'),cols_lims=NULL,node_size_name="number of genes") {
   
   if(!any('discrete'%in%cols)){
     locol=cols[1]
@@ -101,7 +107,8 @@ add_category_nodes <- function(p,col.var,cols=c('blue','white','red'),cols_lims=
 
   p<-p + ggnewscale::new_scale_fill() +geom_point(shape = 21, aes_(x =~ x, y =~ y, fill =~ colvar,
                                                                    size =~ size)) +
-    scale_size_continuous(name = "number of genes",
+    
+    scale_size_continuous(name = node_size_name,
                           range = c(3, 8) )
   
   if('discrete'%in%cols){
@@ -150,11 +157,19 @@ FormatEnrichmentRes<-function(x){
 }
 
 #main function####
+#EMMAPLOT
+#col.var: color nodes based on which variable in the res_fgsea
+#size.var: size of the nodes based on which variable in the res_fgsea
+#show_pathway_of: vector of gene. Show only pathway enriched containing this gene(s)
+#simat: the similarity/correlation matrix
+#min_edge: score from the simat from which to create edge
 
 emmaplot<-function(res_fgsea,
                    pathway_names=NULL, 
                    col.var=NULL,
+                   size.var=NULL,
                    show_pathway_of=NULL,
+                   simat=NULL,
                    min_edge=0.2,
                    label.size=2.5,
                    cols=c('blue','white','red'),
@@ -200,8 +215,9 @@ emmaplot<-function(res_fgsea,
   
   
   
-  if(is.null(pathway_names))pathway_names=res_fgsea[order(pval)]$pathway
+  if(is.null(pathway_names))pathway_names=res_fgsea$pathway
   
+ 
   lelist<-LeadingEdges(res_fgsea[pathway%in%pathway_names])
   
   if(!is.null(show_pathway_of)){
@@ -217,11 +233,26 @@ emmaplot<-function(res_fgsea,
   
   if(length(lelist)>1){
     
-    simat<-get_similarity_matrix(lelist)
+    if(is.null(simat)){
+      simat<-get_similarity_matrix(lelist)
+      
+    }else{
+      simat<-simat[pathway_names,pathway_names]
+      diag(simat)<-NA
+    }
     
+    
+    if(!is.null(size.var)){
+      node_size=setNames(res_fgsea[[size.var]],res_fgsea$pathway)
+      node_size_name=size.var
+    }else{
+      node_size=NULL
+      node_size_name=NULL
+    }
     g <- get_igraph(res_fgsea = res_fgsea,
                     pathway_names = pathway_names,
                     simmat = simat,
+                    node_size =node_size ,
                     leading_edge_list = lelist,
                     min_edge = min_edge,
                     col.var = col.var
@@ -230,10 +261,12 @@ emmaplot<-function(res_fgsea,
     
     p <- ggraph(g, layout='nicely')
     #width=enquo(width)
-    p <- p + geom_edge_link(alpha=.8, aes(edge_width=I(width)),
-                            colour='darkgrey')
+    p <- p + geom_edge_link(alpha=.7, aes(edge_width=width),
+                            colour='gray')+scale_edge_width_continuous(range = c(0.5,3),
+                                                                           limits = c(min_edge,max(E(g)$width)))
     ## add dot
-    p <- add_category_nodes(p = p,col.var =col.var,cols=cols,cols_lims=cols_lims)
+    p <- add_category_nodes(p = p,col.var =col.var,cols=cols,cols_lims=cols_lims,
+                            node_size_name =node_size_name)
     
     ## add node label
     
@@ -241,7 +274,7 @@ emmaplot<-function(res_fgsea,
     
   }else{
     p <- ggplot(res_fgsea[pathway%in%pathway_names][,x:=1][,y:=1],aes_string(x='x',y='x'))+
-      geom_point(aes_string(size='size',col=col.var))+
+      geom_point(aes_string(size=size.var,col=col.var))+
       geom_text_repel(aes(label=pathway))+
       scale_color_gradient2(low = cols[1],high = cols[length(cols)],
                             midpoint = 0,limits=c(-abs(as.numeric(as.vector(res_fgsea[pathway%in%pathway_names][,..col.var]))),

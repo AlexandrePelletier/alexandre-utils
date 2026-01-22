@@ -18,9 +18,10 @@ CompZ<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
                 show_pval=TRUE,
                 title=NA,
                 FDR_thr=0.05,suggestive_thr=NULL,
-                show_several_stars=FALSE){
+                show_several_stars=FALSE,...){
   x<-copy(x)
   
+  if('cov'%in%colnames(x)&covcol!='cov')x<-x[,-'cov']
   setnames(x,covcol,'cov')
   setnames(x,zcol,'zscore')
   setnames(x,group.by,'group')
@@ -68,7 +69,7 @@ CompZ<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
                             cluster_cols = cluster_cols,
                             number_color = 'white',
                             cellwidth =cellwidth,
-                            fontsize_number = fontsize_number ))
+                            fontsize_number = fontsize_number,treeheight_row =20,treeheight_col = 20 ,...))
   
   
   
@@ -170,15 +171,22 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
                        pval_col='padj',effect_col='NES',pathw_col='pathway',
                        padj_sig_thr=0.1,
                        padj_sugg_thr=0.25,
+                       signif_col=NULL,
                        colors=c("blue", "white", "red"),
                        white_thr=0.5,
                        colors_resol=100,
                        na_value=0,
                        show_NA=TRUE,
-                       width =7,height = 7,max_color=2,cellwidth=16){
+                       width =7,height = 7,max_color=2,
+                       cellwidth=16,cluster_cols=TRUE,
+                       cluster_rows=TRUE,main=NULL,...){
   require('pheatmap')
   require('data.table')
   res_gsea1<-copy(res_gsea_or_or)
+  
+  if(is.null(main)){
+    main=effect_col
+  }
   
   if(length(group.by)>1){
     res_gsea1[,comp:=Reduce(function(...)paste(...,sep='_'),.SD),.SDcols=group.by]
@@ -197,12 +205,18 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
                            pathw~comp,value.var =effect_col),row.names = 'pathw')
   
   mat_gsea[is.na(mat_gsea)]<-na_value
-  
+
 
   
   #add pvalue
   res_gsea1[,padj:=.SD,.SDcols=pval_col]
-  res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<padj_sig_thr,'*',ifelse(padj<padj_sugg_thr,'.',''))))]
+  if(is.null(signif_col)){
+    res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<padj_sig_thr,'*',ifelse(padj<padj_sugg_thr,'.',''))))]
+    
+  }else{
+    res_gsea1[,padjsig:=.SD,.SDcols=signif_col]
+    
+  }
   res_gsea1[is.na(padj),padjsig:='']
   mat_gseap<-data.frame(dcast(res_gsea1,pathw~comp,value.var ='padjsig'),row.names = 'pathw')
   
@@ -254,13 +268,14 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
                  breaks =col_breaks,
                  color=colors,
                  fontsize_row = 7,
-                 main=effect_col,
+                 main=main,
                  display_numbers = mat_gseap[rownames(mat_gsea),colnames(mat_gsea)],
                  number_color = 'white',
-                 cluster_cols = T,
+                 cluster_cols = cluster_cols,
                  cellwidth =cellwidth,
                  annotation_col = mtd_compa,
-                 fontsize_number = 10))
+                 fontsize_number = 10,
+                 cluster_rows = cluster_rows,...))
   
 }
 
