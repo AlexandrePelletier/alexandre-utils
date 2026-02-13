@@ -1313,15 +1313,15 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
     qsub_file<-str_replace(r_file,'\\.R$','.qsub')
   }
   
-  filename<-basename(r_file)
-  projdir<-dirname(r_file)
+  filename<-basename(qsub_file)
+  projdir<-dirname(qsub_file)
   while(str_detect(projdir,'scripts')){
     projdir<-dirname(projdir)
   }
   
   #create log file
   dir.create(file.path(projdir,'logs'),showWarnings = F)
-  log_file=file.path(projdir,'logs',str_replace(filename,'\\.R$','.log'))
+  log_file=file.path(projdir,'logs',str_replace(filename,'\\.qsub$','.log'))
   
   
   #create the Rscript cmds to exec
@@ -1330,37 +1330,42 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
     
   }else{
     
-    qsub_file0<-qsub_file
-    log_file0<-log_file
     
     args<-lapply(args, function(arg)sapply(arg,function(x)paste0("'",x,"'")))
-    
-  cmds<-lapply(as.character(args[[1]]), function(arg1){
-    
-    
    
-    params_name<-make.names(tools::file_path_sans_ext(basename(arg1)))
-    i<-1
-    while(length(args)>i){
-      i<-i+1
-      argsup<-args[[i]]
+    
+  cmds<-lapply(1:length(args[[1]]), function(i){
+    arg1<-args[[1]][i]
+   
+    params_name<-paste0(make.names(str_trunc(basename(arg1),width = 10,ellipsis = '')),'.',i)
+    j<-1
+    while(length(args)>j){
+      j<-j+1
+      argsup<-args[[j]]
       
-      params_name<-paste(params_name,make.names(tools::file_path_sans_ext(basename(argsup))),sep='_')
+      params_name<-paste(params_name,make.names(tools::file_path_sans_ext(str_trunc(basename(argsup),width = 10,ellipsis = ''))),sep='_')
       
     }
     
-    qsub_file<<-paste0(str_replace(qsub_file0,'.qsub$','_'),
-                       params_name,'.qsub')
-    
-    
-    log_file<<-paste0(str_replace(log_file0,'.log$','_'),params_name,'.log')
+    # qsub_file<<-paste0(str_replace(qsub_file0,'.qsub$','_'),
+    #                    params_name,'.qsub')
+    # 
+    # 
+     log_filearg<-paste0(str_replace(log_file,'.log$','_'),params_name,'.log')
 
     cmd<-paste('Rscript',r_file,arg1,paste(unlist(args[-1]),
-                                           collapse = ' '),'>>',log_file)
+                                           collapse = ' '),'>>',log_filearg)
     return(cmd)
   })
+  arg1_names<-str_trunc(basename(as.character(args[[1]])),width = 10,ellipsis = '')
+  if(length(unique(arg1_names))==length(arg1_names)){
+    names(cmds)<-arg1_names
+  }else{
+    names(cmds)<-paste0('el',1:length(args[[1]]))
+  }
+    
+
   
-  names(cmds)<-make.names(tools::file_path_sans_ext(basename(as.character(args[[1]]))))
   
   #identify the commands with supplemental parameters if present
   i<-1
@@ -1368,11 +1373,12 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
     i<-i+1
     argsup<-args[[i]]
     
-    names(cmds)<-paste(names(cmds),make.names(tools::file_path_sans_ext(basename(argsup))),sep='_')
+    names(cmds)<-paste(names(cmds),make.names(tools::file_path_sans_ext( str_trunc(basename(argsup),width = 10,ellipsis = ''))),sep='_')
     
   }
   
   }
+
   #show the first R lines
   message('the 15 firsts R lines to executes')
   system(paste('head -n 15',r_file))

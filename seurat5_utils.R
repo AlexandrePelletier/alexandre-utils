@@ -1,6 +1,58 @@
 #SeuratV5 utils
 require(Seurat)
 
+#SketchSCT: perform SCTransform normalization on large datasets, saving the assay in BPMatrix format
+SketchSCT<-function(ctobj,bpcells_dir,
+                    group.by='individualID',
+                    ncells.sct=50000,sctassay='SCTcounts'){
+  dir.create(bpcells_dir)
+  DefaultAssay(ctobj)<-'RNA'
+  
+  ctobj<-SketchData(ctobj,ncells = ncells.sct)
+  ctobj<-JoinLayers(ctobj,assay = 'sketch')
+  ctobj<-SCTransform(ctobj,assay = 'sketch',
+                     new.assay.name = 'sketchSCT',
+                     method = "glmGamPoi",
+                     return.only.var.genes = TRUE,
+                     do.correct.umi = FALSE
+  )
+  DefaultAssay(ctobj)<-'RNA'
+  ctobj$nCount_RNA<-lapply(Layers(ctobj,search = 'counts'),function(lay)colSums(LayerData(ctobj,assay = "RNA",layer = lay)))|>unlist()
+  ctobj[["log_umi"]]<-log10(ctobj$nCount_RNA) 
+  
+  
+  sct.list<-lapply(Layers(ctobj,search = 'counts'), function(lay){
+    
+    bpdir=fp(bpcells_dir,str_remove(lay,'counts.'))
+    
+    mat<-LayerData(ctobj,layer = lay,assay = 'RNA')
+    
+    vst.out=SCTransform(
+      mat,
+      cell.attr=ctobj@meta.data[colnames(mat),'log_umi',drop=FALSE],
+      reference.SCT.model = ctobj[["sketchSCT"]]@SCTModel.list[[1]],
+      conserve.memory=TRUE
+    )
+    
+    counts<-convert_matrix_type(vst.out$umi_corrected,type='uint32_t')
+    
+    write_matrix_dir(
+      mat = counts,
+      dir = bpdir)
+    
+    mat <- open_matrix_dir(dir =bpdir)
+    return(mat)
+    
+  })
+  
+  names(sct.list)<-Layers(ctobj,search = 'counts')|>str_remove('counts.')
+  
+  ctobj[[sctassay]]<-CreateAssay5Object(counts = sct.list,data = lapply(sct.list,log1p))
+  
+  return(ctobj)
+  
+}
+
 
 CalcSplicDef <- function(obj, ...) {
   UseMethod("CalcSplicDef")

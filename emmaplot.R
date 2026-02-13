@@ -141,9 +141,17 @@ add_node_label <- function(p,label.size=label.size,max.overlaps=10) {
   
   return(p)
 }
-FormatEnrichmentRes<-function(x){
-  if(all(c('term','n.overlap')%in%colnames(x))){
-    x[,pathway:=term]
+
+
+FormatEnrichmentRes<-function(x,pathway_col=NULL){
+  if('n.overlap'%in%colnames(x)){
+    if(!is.null(pathway_col)){
+      x[,pathway:=.SD,.SDcols=pathway_col]
+      
+    }else{
+      x[,pathway:=term]
+      
+    }
     x[,size:=n.overlap]
     if('genes.overlap'%in%colnames(x)){
       x[,leadingEdge:=genes.overlap]
@@ -166,6 +174,7 @@ FormatEnrichmentRes<-function(x){
 
 emmaplot<-function(res_fgsea,
                    pathway_names=NULL, 
+                   pathway_col=NULL,
                    col.var=NULL,
                    size.var=NULL,
                    show_pathway_of=NULL,
@@ -187,7 +196,7 @@ emmaplot<-function(res_fgsea,
   }
 
 
-  res_fgsea<-FormatEnrichmentRes(res_fgsea)
+  res_fgsea<-FormatEnrichmentRes(res_fgsea,pathway_col = pathway_col )
   
   if(is.null(col.var)){
     if(all(c('term','n.overlap')%in%colnames(res_fgsea))){
@@ -279,7 +288,7 @@ emmaplot<-function(res_fgsea,
       scale_color_gradient2(low = cols[1],high = cols[length(cols)],
                             midpoint = 0,limits=c(-abs(as.numeric(as.vector(res_fgsea[pathway%in%pathway_names][,..col.var]))),
                                                                                                  abs(as.numeric(as.vector(res_fgsea[pathway%in%pathway_names][,..col.var])))))+
-      theme_graph()
+      theme_void()
     
   }
   
@@ -305,10 +314,11 @@ emmaplot<-function(res_fgsea,
 GetPathwaysLinks<-function(res_fgsea,
                    pathway_names=NULL,
                    show_pathway_of=NULL,
-                   min_edge=0.2){
+                   min_edge=0.2,pathway_col=NULL){
   require('ggrepel')
   
-  res_fgsea<-FormatEnrichmentRes(res_fgsea)
+  res_fgsea<-FormatEnrichmentRes(res_fgsea,pathway_col = pathway_col)
+  
   if(is.null(pathway_names))pathway_names=res_fgsea[order(pval)]$pathway
   
   lelist<-LeadingEdges(res_fgsea[pathway%in%pathway_names])
@@ -348,16 +358,18 @@ GetPathwaysLinks<-function(res_fgsea,
 }
 
 
-ClusterPathways<-function(x,resolution=1,method='leiden',weights=NULL,min_edge=0.2){
+#ClusterPathways: return the enrichment data.tabl with cluster of pathways added to if
+ClusterPathways<-function(x,resolution=1,method='leiden',weights=NULL,min_edge=0.2,pathway_col=NULL){
   require(igraph)
-  x<-FormatEnrichmentRes(x)
+  x<-FormatEnrichmentRes(x,pathway_col=pathway_col)
+  
   if(length(unique(x$pathway))>1){
     if(is.null(weights)){
       if(!'weight'%in%colnames(x)){
         # if(is.null(min_edge)){
         #   min_edge=0.2
         # }
-        links<-GetPathwaysLinks(x,min_edge = min_edge)
+        links<-GetPathwaysLinks(x,min_edge = min_edge,pathway_col=pathway_col)
         
       }
       
@@ -391,6 +403,99 @@ ClusterPathways<-function(x,resolution=1,method='leiden',weights=NULL,min_edge=0
     return(x[,cluster:=NA])
   }
 
+}
+
+
+#PathwaysSelection: cluster the pathways using emmaplot, pick the first by cluster based on pval, 
+#and let add or edit the pathways selected by the user. Return the enrichment data.table with 
+#res_enr:
+#interactive: add or edit the pathways selected (with +/-)
+#add_plot: which additional metric to color by the pathways on the graph. if a plot, just plot next to the graph
+#split.by: from which variable to split by the emmaplot to select step by step. NA/0 no spliting
+PathwaysSelection<-function(res_enr,interactive=TRUE,add_plot=NULL,plots_widths=c(1,1),
+                            resolution =1,min_edge=0.2,pathway_col=NULL,split.by='cluster',group.by=NULL){
+  res_enr<-FormatEnrichmentRes(copy(res_enr),pathway_col = pathway_col)
+  
+  selection<-c()
+  
+  if(!'selected'%in%colnames(res_enr)){
+    res_enr[,selected:=FALSE]
+  }
+  
+  selection<-res_enr[(selected)]$pathway
+  
+  if(is.null(group.by)){
+    res_enr[,group:=0]
+  }else {
+    res_enr[,group:=apply(.SD,1,paste,collapse='.'),.SDcols =group.by ]
+    
+  }
+  
+  for(g in unique(res_enr$group)){
+    message(g)
+    res_enrf<-copy(res_enr[group==g])
+    res_enrf<-res_enrf[order(pval)]
+    res_enrf[,pathway_num:=1:.N]
+    res_enrf[,pathway_with_num:=paste(pathway_num,pathway,sep='-')]
+    
+    # cluster pathways
+    if(is.null(split.by)){
+      res_enrf[,split:=0]
+      
+    }else if(split.by=='cluster'){
+      res_enrf<-ClusterPathways(res_enrf,resolution = resolution ,min_edge = min_edge,pathway_col = 'pathway_with_num')
+      res_enrf[is.na(cluster),cluster:=0]
+      res_enrf[,split:=cluster]
+      
+    }else if(all(split.by%in%colnames(res_enrf))){
+      res_enrf[,split:=apply(.SD,1,paste,collapse='.'),.SDcols =split.by ]
+      
+    }else{
+      res_enrf[,split:=split.by]
+    }
+    
+    # #select the top per cluster and all 0 cluster
+    # res_enrf[,selected:=rank(pval)==1,by='split']
+    #   
+    #if interactive, show and let choose
+      
+      for(cl in unique(res_enrf$split)){
+        message('cluster ',cl)
+        p1<-emmaplot(res_enrf[split==cl],col.var = 'selected',pathway_col = 'pathway_with_num')
+        
+        if(!is.null(add_plot)){
+          if(is.character(add_plot)){
+            add_plot<-emmaplot(res_enrf[split==cl],col.var = add_plot,pathway_col = 'pathway_with_num')
+            
+          }
+          pall<-p1+add_plot
+          print(pall+plot_layout(nrow = 1,widths = plots_widths))
+          
+        }else{
+          print(p1)
+        }
+        
+        edit<-readline(prompt = 'pathways selection:')
+        
+        torm<-str_extract(edit,'\\-[0-9]+')|>str_extract('[0-9]+')|>as.numeric()
+        toadd<-strsplit(edit,'\\+|\\-')|>unlist()|>as.numeric()
+        toadd<-setdiff(toadd,torm)
+        
+        
+        selection<-union(setdiff(selection,res_enrf[pathway_num%in%torm]$pathway),
+                         res_enrf[pathway_num%in%toadd]$pathway)
+        print(selection)
+        res_enr[pathway%in%selection,selected:=TRUE]
+        res_enrf[pathway%in%selection,selected:=TRUE]
+        
+      }
+    
+  }
+    
+   
+
+  return(selection)
+  
 }
 
 

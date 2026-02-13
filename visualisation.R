@@ -167,7 +167,11 @@ source('emmaplot.R')
 
 #HEATMAPs comparing pathhways###
 
-CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE,
+#legend.compa /.pathway: colomn name in the dataframe to annotate the variable or the pathways
+CompPathways<-function(res_gsea_or_or,group.by,
+                       legend.compa=NULL,
+                       legend.pathway=NULL,
+                       rm.refkey=FALSE,
                        pval_col='padj',effect_col='NES',pathw_col='pathway',
                        padj_sig_thr=0.1,
                        padj_sugg_thr=0.25,
@@ -179,7 +183,7 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
                        show_NA=TRUE,
                        width =7,height = 7,max_color=2,
                        cellwidth=16,cluster_cols=TRUE,
-                       cluster_rows=TRUE,main=NULL,...){
+                       cluster_rows=TRUE,main=NULL,fontsize_number=10,...){
   require('pheatmap')
   require('data.table')
   res_gsea1<-copy(res_gsea_or_or)
@@ -263,6 +267,17 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
   }else{
     mtd_compa<-NA
   }
+  
+  if(!is.null(legend.pathway)){
+    
+    cols_mtd<-c('pathw',legend.pathway)
+    mtd_path<-unique(res_gsea1[,.SD,.SDcols=cols_mtd],by='pathw')
+    # mtd_path[,pathw:=make.names(pathw)]
+    mtd_path<-data.frame(mtd_path,row.names = 'pathw')[,legend.pathway,drop=FALSE]
+
+  }else{
+    mtd_path<-NA
+  }
 
   return(pheatmap(mat_gsea,
                  breaks =col_breaks,
@@ -274,7 +289,8 @@ CompPathways<-function(res_gsea_or_or,group.by,legend.compa=NULL,rm.refkey=FALSE
                  cluster_cols = cluster_cols,
                  cellwidth =cellwidth,
                  annotation_col = mtd_compa,
-                 fontsize_number = 10,
+                 annotation_row = mtd_path,
+                 fontsize_number = fontsize_number,
                  cluster_rows = cluster_rows,...))
   
 }
