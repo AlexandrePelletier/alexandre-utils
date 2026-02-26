@@ -153,20 +153,20 @@ RunFgseaMsigdb<-function(res_de,score='stat',rankbased=F,
       res_de<-res_de[!to_rm]
       
     }
-    dups<-duplicated(res_de[order(-res_de[[score]])]$gene)
+    dups<-duplicated(res_de[order(-abs(res_de[[score]]))]$gene)
     
     if(sum(dups)>0){
       if(sum(dups)>0.75*length(unique(res_de$gene))&!force_run){
         stop('>75% of duplicated gene names, probably several non separated conditions.')
       }
-      warning(sum(dups),' duplicated genes')
+      message(sum(dups),' duplicated genes')
       if(duplicate_choice=='top'){
-        warning(' removing them by picking the top abs(stat) per gene')
-        res_de<-res_de[order(-abs(res_de[[score]]))][!(dups)]
+        message(' removing them by picking the top abs(stat) per gene')
+        res_de<-res_de[order(-abs(res_de[[score]]))][!(duplicated(gene))]
         
         
       }else if(duplicate_choice=='random'){
-        warning(' removing them by randomly picking one unique gene')
+        message(' removing them by randomly picking one unique gene')
         res_de<-unique(res_de[sample(1:nrow(res_de))],by=gene_col)
       
       }

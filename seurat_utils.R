@@ -1,6 +1,24 @@
 #seurat utils
 require('Seurat')
 
+GetPseudo<-function(ctobj,group.by='individualID',assay='RNA',pattern_mt='^MT-'){
+  ctobj$nCount<-ctobj[[paste0('nCount_',assay)]]
+  ctobj$nFeature<-ctobj[[paste0('nFeature_',assay)]]
+  ctobj$percent.mt<-PercentageFeatureSet(ctobj,pattern =pattern_mt,assay =assay )
+  
+  mtd<-data.table(ctobj@meta.data,keep.rownames = 'cell_id')
+  mts<-mtd[,.(avg.mt=mean(percent.mt),
+              n.cells=.N,
+              med_umis=median(nCount),
+              med_genes=median(nFeature)),by=group.by]|>unique()
+  pseudo_mat<-AggregateExpression(ctobj,group.by = group.by)[[assay]]
+  
+  
+  return(list(mat=pseudo_mat,
+              mtd=mts))
+  
+}
+
 splitCluster<-function(sample,cluster,dimensions=1:6,resol=0.3){
   library(stringr)
   cluster_to_div<-subset(sample,idents = cluster)

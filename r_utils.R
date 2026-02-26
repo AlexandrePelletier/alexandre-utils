@@ -930,9 +930,10 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modu
   if(!str_detect(file,'\\.qsub$')){
     file=paste0(file,'.qsub')
   }
+  if(!dir.exists(dirname(file)))dir.create(dirname(file))
+  
   filename<-basename(file)
   projdir<-dirname(file)
-  
   
   while(str_detect(projdir,'scripts')){
     projdir<-dirname(projdir)
@@ -944,6 +945,9 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modu
     log_file=file.path(projdir,'logs',paste0(str_remove(filename,'.qsub$'),'.log'))
     
   }
+  
+  if(!dir.exists(dirname(log_file)))dir.create(dirname(log_file))
+  
   
   #create the qsub file
   cat('#!/bin/bash -l\n',file = file_path)
@@ -1358,11 +1362,9 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
     return(cmd)
   })
   arg1_names<-str_trunc(basename(as.character(args[[1]])),width = 10,ellipsis = '')
-  if(length(unique(arg1_names))==length(arg1_names)){
-    names(cmds)<-arg1_names
-  }else{
-    names(cmds)<-paste0('el',1:length(args[[1]]))
-  }
+ 
+  names(cmds)<-paste0('el',1:length(args[[1]]),'_',arg1_names)
+
     
 
   
@@ -1414,10 +1416,12 @@ RunQsub<-function(qsub_file=NULL,job_name=NULL,proj_name=NULL,wait_for=NULL,dryr
   }else{
     cmd<-paste('qsub',
                '-N',job_name,
-               '-hold_jid',wait_for,
+               '-hold_jid',paste(wait_for,collapse = ','),
                qsub_file,proj_name)
+    
   }
   if(!dryrun){
+    message('command: ',cmd)
     message<-system(cmd,intern = TRUE)
     message(paste(message,collapse = '\n'))
 
