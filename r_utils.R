@@ -26,6 +26,7 @@ qs<-function()system('qstat -u adpelle1')
 
 
 
+
 #detach_package
 detach_package <- function(pkg, character.only = FALSE)
 {
@@ -261,6 +262,14 @@ ReFormatDERes<-function(res_de,to='SEURAT'){
 
 bar_bw<-function()scale_fill_manual(values=c('black','grey'))
 bar_rb<-function(invert=FALSE)ifelse(invert,return(scale_fill_manual(values=c('royalblue3','orangered3'))),return(scale_fill_manual(values=c('orangered3','royalblue3'))))
+
+
+NoXAxis<-function()theme(axis.title.x = element_blank(),
+      axis.text.x = element_blank(),axis.ticks.x = element_blank())
+
+
+NoYAxis<-function()theme(axis.title.y = element_blank(),
+                         axis.text.y = element_blank(),axis.ticks.y = element_blank())
 
 #BIOMART####
 

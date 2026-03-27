@@ -177,12 +177,28 @@ emmaplot<-function(res_fgsea,
                    pathway_col=NULL,
                    col.var=NULL,
                    size.var=NULL,
+                   group.by=NULL,
                    show_pathway_of=NULL,
                    simat=NULL,
                    min_edge=0.2,
                    label.size=2.5,
                    cols=c('blue','white','red'),
                    max.overlaps=10,cols_lims=NULL){
+  if(!is.null(group.by)){
+    
+    ps<-lapply(split(res_fgsea,by=group.by), function(res)emmaplot(res,  pathway_names=pathway_names, 
+                                                                   pathway_col=pathway_col,
+                                                                   col.var=col.var,
+                                                                   size.var=size.var,
+                                                                   show_pathway_of=show_pathway_of,
+                                                                   simat=simat,
+                                                                   min_edge=min_edge,
+                                                                   label.size=label.size,
+                                                                   cols=cols,
+                                                                   max.overlaps=10,cols_lims=cols_lims))
+    ps<-lapply(names(ps), function(n)ps[[n]]+ggtitle(n))
+    return(wrap_plots(ps))
+  }
   require('ggrepel')
   if(!'data.table'%in%class(res_fgsea)){
     res_fgsea<-data.table(res_fgsea)
@@ -477,7 +493,7 @@ PathwaysSelection<-function(res_enr,interactive=TRUE,add_plot=NULL,plots_widths=
         
         edit<-readline(prompt = 'pathways selection:')
         
-        torm<-str_extract(edit,'\\-[0-9]+')|>str_extract('[0-9]+')|>as.numeric()
+        torm<-str_extract_all(edit,'\\-[0-9]+')|>unlist()|>str_extract('[0-9]+')|>as.numeric()
         toadd<-strsplit(edit,'\\+|\\-')|>unlist()|>as.numeric()
         toadd<-setdiff(toadd,torm)
         
@@ -495,6 +511,63 @@ PathwaysSelection<-function(res_enr,interactive=TRUE,add_plot=NULL,plots_widths=
    
 
   return(selection)
+  
+}
+
+#return the enrichment data table filitred with your saved and new selected pathways
+EditPathwaysSelection<-function(res_enr,saved,group.by=NULL){
+  
+  
+  selection.old<-saved$term|>unique()
+  res_enrnew<-res_enr[!query%in%unique(saved$query)]
+  if(nrow(res_enrnew)>0){
+    
+    res_enrnew[,selected:=term%in%selection.old]
+    selection<-PathwaysSelection(res_enrnew,group.by =group.by,split.by = NULL)
+    selection<-union(selection.old,selection)
+    
+    
+  }else{
+    selection<-selection.old
+  }
+  
+  res_enrf<-res_enr[term%in%selection]
+  
+  if(length(setdiff(selection,selection.old))>0){
+    res_enrf[,term_nice:=TidyPathwayNames(term,remove_gs_source = TRUE)]
+    hm<-CompPathways(res_enrf,
+                     group.by = 'query',pathw_col = 'term_nice',effect_col = 'log2FE',max_color = 3)
+    res_enrf[,pval10:=ifelse(pval<1e-10,1e-10,pval)]
+    res_enrf<-res_enrf[data.table(term_nice=hm$tree_row$labels[hm$tree_row$order],
+                                  num=1:length(hm$tree_row$labels)),on=c('term_nice')]
+    res_enrf[,term_num:=paste(num,term_nice)]
+    
+    
+    #further filter
+    keepediting=TRUE
+    while(keepediting){
+      p<-ggplot(res_enrf[padj<0.25])+
+        geom_point(aes(x=query.,y=term_num,size=precision*100,col=-log10(pval10)))+
+        scale_x_discrete(guide = guide_axis(angle = 60))+theme_bw()+
+        scale_color_gradient2(high = 'red3',low = 'blue2')+scale_y_discrete(limits=res_enrf[order(num)]$term_num|>unique())+
+        labs(size='% of the gene-set',y='MSigDB GO/CP pathways',x='cell state signature')
+      print(p)
+      to_rm<-readline(prompt = "to remove (the num, sep by any sep. to stop just leave empty):")|>str_extract('[0-9]+')|>as.numeric()
+      if(length(to_rm[!is.na(to_rm)])>0){
+        res_enrf<-res_enrf[!num%in%to_rm]
+        
+      }else{
+        keepediting=FALSE
+        
+        res_enrf<-res_enrf[,-c('term_num','num')]
+      }
+      
+    }
+    
+    
+    
+  }
+  return(res_enrf)
   
 }
 
