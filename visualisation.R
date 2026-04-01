@@ -1,6 +1,6 @@
 
 #required package
-require(pheatmap::pheatmap)
+require(pheatmap)
 require(stringr)
 require(ggplot2)
 require(data.table)
@@ -241,7 +241,7 @@ return(draw(ht))
 #pval_column: name of the column with the (adjuster) pvalue of the DEGs,
 #col_range: adjust the minimum and maximum value of the fold change colors
 #save.pdf: where to save the heatmap as pdf. default NULL (not save as pdf)
-#OUTPUT: a pheatmap::pheatmap heatmap with asterisk for each gene-comparison if p<0.001 : ***, p<0.01: **, p<0.05: *, p<0.25: '.'. 
+#OUTPUT: a pheatmap heatmap with asterisk for each gene-comparison if p<0.001 : ***, p<0.01: **, p<0.05: *, p<0.25: '.'. 
 CompDEGs<-function(res_des,
                    group.by,
                    gene_column='gene',
@@ -257,7 +257,7 @@ CompDEGs<-function(res_des,
                    show_pval=TRUE,
                    width =7,
                    height = 7){
-  require('pheatmap::pheatmap')
+  require('pheatmap')
   require('data.table')
   
   res_des1<-copy(res_des)
@@ -293,7 +293,7 @@ CompDEGs<-function(res_des,
   col_breaks<-c(((col_range[1]*colors_resol):(col_range[2]*colors_resol))/colors_resol)
   colors=color_gradient(length(col_breaks)-1)
 
-  return(pheatmap::pheatmap::pheatmap::pheatmap(mat_de,
+  return(pheatmap::pheatmap(mat_de,
                   breaks =col_breaks,
                   color=colors,
                   fontsize_row = 7,
@@ -340,7 +340,7 @@ CompPathways<-function(res_gsea_or_or,group.by,
                        width =7,height = 7,max_color=2,
                        cellwidth=16,cluster_cols=TRUE,
                        cluster_rows=TRUE,main=NULL,fontsize_number=10,...){
-  require('pheatmap::pheatmap')
+  require('pheatmap')
   require('data.table')
   res_gsea1<-copy(res_gsea_or_or)
   
@@ -435,7 +435,7 @@ CompPathways<-function(res_gsea_or_or,group.by,
     mtd_path<-NA
   }
 
-  return(pheatmap::pheatmap::pheatmap::pheatmap(mat_gsea,
+  return(pheatmap::pheatmap(mat_gsea,
                  breaks =col_breaks,
                  color=colors,
                  fontsize_row = 7,
@@ -453,7 +453,7 @@ CompPathways<-function(res_gsea_or_or,group.by,
 
 
 CompGSEA<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=TRUE,save.pdf=NULL,width =7,height = 7){
-  require('pheatmap::pheatmap')
+  require('pheatmap')
   require('data.table')
   
   res_gsea1<-copy(res_gsea)
@@ -529,7 +529,7 @@ CompGSEA<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=TRUE,save.pdf=N
 
 CompGost<-function(res_enr,group.by,score='precision',col_max=1,
                    legend.compa=NULL,save.pdf=NULL,width =7,height = 7){
-  require('pheatmap::pheatmap')
+  require('pheatmap')
   require('data.table')
   
   res_enr1<-copy(res_enr)
