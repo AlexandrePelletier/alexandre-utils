@@ -1,6 +1,6 @@
 
 #required package
-require(pheatmap)
+require(pheatmap::pheatmap)
 require(stringr)
 require(ggplot2)
 require(data.table)
@@ -11,6 +11,8 @@ source<-function(file,chdir=TRUE)base::source(file,chdir = chdir)
 CompZ<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
                 colors=c("blue", "white", "red"),
                 colorlim=10,color_range=NULL,
+                legend.compa=NULL,
+                annotation_colors  = NULL,
                 cluster_cols=TRUE,
                 fontsize_row = 7,cellwidth=12,
                 fontsize_number = 12,
@@ -22,9 +24,10 @@ CompZ<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
   x<-copy(x)
   
   if('cov'%in%colnames(x)&covcol!='cov')x<-x[,-'cov']
-  setnames(x,covcol,'cov')
-  setnames(x,zcol,'zscore')
-  setnames(x,group.by,'group')
+  x[,cov:=.SD,.SDcols=covcol]
+  x[,zscore:=.SD,.SDcols=zcol]
+  x[,group:=.SD,.SDcols=group.by]
+  
   
   x[,zscore:=ifelse(abs(zscore)>colorlim,sign(zscore)*colorlim,zscore)]
   
@@ -56,6 +59,16 @@ CompZ<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
     
   }
   
+  if(!is.null(legend.compa)){
+    cols_mtd<-c('group',union(group.by,legend.compa))
+    mtd_compa<-unique(x[,.SD,.SDcols=cols_mtd])
+    mtd_compa[,group:=make.names(group)]
+    mtd_compa<-data.frame(mtd_compa,row.names = 'group')[,legend.compa,drop=F]
+  }else{
+    mtd_compa<-NA
+  }
+  
+  
   col_breaks<-c(((color_range[1]*100):(color_range[2]*100))/100)
   colors=color_gradient(length(col_breaks)-1)
   
@@ -66,6 +79,8 @@ CompZ<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
                             show_rownames=show_rownames,
                             main=title,
                             display_numbers = matp,
+                            annotation_col = mtd_compa,
+                            annotation_colors = annotation_colors,
                             cluster_cols = cluster_cols,
                             number_color = 'white',
                             cellwidth =cellwidth,
@@ -73,6 +88,147 @@ CompZ<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
   
   
   
+}
+
+CompZ2<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
+                colors=c("blue", "white", "red"),
+                colorlim=10,color_range=NULL,
+                legend.compa=NULL,
+                annotation_colors  = NULL,
+                cluster_cols=TRUE,
+                fontsize_row = 7,cellwidth=12,
+                fontsize_number = 12,
+                show_rownames=TRUE,
+                show_pval=TRUE,
+                title=NULL,
+                FDR_thr=0.05,suggestive_thr=NULL,
+                show_several_stars=FALSE,...){
+  library(ComplexHeatmap)
+  library(circlize)
+  library(grid)
+  x<-copy(x)
+  
+  if(is.null(title)){
+    title=zcol
+  }
+  
+  if('cov'%in%colnames(x)&covcol!='cov')x<-x[,-'cov']
+  x[,cov:=.SD,.SDcols=covcol]
+  x[,zscore:=.SD,.SDcols=zcol]
+  x[,group:=.SD,.SDcols=group.by]
+  
+  
+  x[,zscore:=ifelse(abs(zscore)>colorlim,sign(zscore)*colorlim,zscore)]
+  
+  matz<-dcast(x,cov~group,value.var ='zscore')|>data.frame(row.names = 'cov')
+  matz[is.na(matz)]<-0
+  
+  if(show_pval){
+    if(show_several_stars){
+      x[,padjsig:=lapply(.SD,function(x)ifelse(x<0.001,'***',ifelse(x<0.01,'**',ifelse(x<=FDR_thr,'*','')))),.SDcols=pvalcol]
+    }else{
+      x[,padjsig:=lapply(.SD,function(x)ifelse(x<=FDR_thr,'*','')),.SDcols=pvalcol]
+    }
+    if(!is.null(suggestive_thr)){
+      x[,padjsig:=ifelse(.SD[[1]]<=suggestive_thr&.SD[[1]]>FDR_thr,'.',padjsig),.SDcols=pvalcol]
+      
+    }
+    
+    matp<-dcast(x,cov~group,value.var ='padjsig')|>data.frame(row.names = 'cov')|>as.matrix()
+    
+  }
+  
+  
+  color_gradient <- colorRampPalette(colors)
+  if(is.null(color_range)){
+    color_range<-c(-max(abs(matz),na.rm = T),max(abs(matz),na.rm = T))
+    
+  }else{
+    mat_dep<-TRUE
+    
+  }
+  
+  if(!is.null(legend.compa)){
+    cols_mtd<-c('group',union(group.by,legend.compa))
+    mtd_compa<-unique(x[,.SD,.SDcols=cols_mtd])
+    mtd_compa[,group:=make.names(group)]
+    mtd_compa<-data.frame(mtd_compa,row.names = 'group')[,legend.compa,drop=F]
+    if(is.null(annotation_colors)){
+      ha <- HeatmapAnnotation(
+        df = mtd_compa,
+      )
+    }else{
+      ha <- HeatmapAnnotation(
+        df = mtd_compa,
+        col = annotation_colors
+      )
+    }
+
+  }else{
+    ha<-NULL
+  }
+  
+
+  
+  col_breaks<-c(((color_range[1]*100):(color_range[2]*100))/100)
+  colors=color_gradient(length(col_breaks))
+  
+
+
+# ---- Color scale (breaks + colors) ----
+col_fun <- colorRamp2(col_breaks, colors)
+
+
+
+# ---- Heatmap ----
+ht <- Heatmap(
+  matz,
+  col = col_fun,
+  
+  # titles
+  name = title,
+  
+  # clustering
+  cluster_columns = cluster_cols,
+  
+  # row names
+  show_row_names = show_rownames,
+  row_names_gp = gpar(fontsize = fontsize_row),
+  
+  # dendrogram size
+  row_dend_width = unit(20, "mm"),
+  column_dend_height = unit(20, "mm"),
+  
+  # annotation
+  top_annotation = ha,
+  
+  # cell size (approximate)
+  width = ncol(matz) * unit(cellwidth, "points"),
+  
+  # ---- numbers in cells ----
+  cell_fun = function(j, i, x, y, w, h, fill) {
+    val <- matp[i, j]
+    
+    if (is.na(val)) return()
+    
+    txt <- if (is.numeric(val)) {
+      sprintf("%.2f", val)
+    } else {
+      as.character(val)
+    }
+    
+    grid.text(
+      txt,
+      x, y,
+      gp = gpar(
+        fontsize = fontsize_number,
+        col = "white"
+      )
+    )
+  }
+)
+
+return(draw(ht))
 }
 
 #DIFFERENTIAL EXPRESSION RESULTS####
@@ -85,7 +241,7 @@ CompZ<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
 #pval_column: name of the column with the (adjuster) pvalue of the DEGs,
 #col_range: adjust the minimum and maximum value of the fold change colors
 #save.pdf: where to save the heatmap as pdf. default NULL (not save as pdf)
-#OUTPUT: a pheatmap heatmap with asterisk for each gene-comparison if p<0.001 : ***, p<0.01: **, p<0.05: *, p<0.25: '.'. 
+#OUTPUT: a pheatmap::pheatmap heatmap with asterisk for each gene-comparison if p<0.001 : ***, p<0.01: **, p<0.05: *, p<0.25: '.'. 
 CompDEGs<-function(res_des,
                    group.by,
                    gene_column='gene',
@@ -101,7 +257,7 @@ CompDEGs<-function(res_des,
                    show_pval=TRUE,
                    width =7,
                    height = 7){
-  require('pheatmap')
+  require('pheatmap::pheatmap')
   require('data.table')
   
   res_des1<-copy(res_des)
@@ -137,7 +293,7 @@ CompDEGs<-function(res_des,
   col_breaks<-c(((col_range[1]*colors_resol):(col_range[2]*colors_resol))/colors_resol)
   colors=color_gradient(length(col_breaks)-1)
 
-  return(pheatmap::pheatmap(mat_de,
+  return(pheatmap::pheatmap::pheatmap::pheatmap(mat_de,
                   breaks =col_breaks,
                   color=colors,
                   fontsize_row = 7,
@@ -184,7 +340,7 @@ CompPathways<-function(res_gsea_or_or,group.by,
                        width =7,height = 7,max_color=2,
                        cellwidth=16,cluster_cols=TRUE,
                        cluster_rows=TRUE,main=NULL,fontsize_number=10,...){
-  require('pheatmap')
+  require('pheatmap::pheatmap')
   require('data.table')
   res_gsea1<-copy(res_gsea_or_or)
   
@@ -279,7 +435,7 @@ CompPathways<-function(res_gsea_or_or,group.by,
     mtd_path<-NA
   }
 
-  return(pheatmap(mat_gsea,
+  return(pheatmap::pheatmap::pheatmap::pheatmap(mat_gsea,
                  breaks =col_breaks,
                  color=colors,
                  fontsize_row = 7,
@@ -297,7 +453,7 @@ CompPathways<-function(res_gsea_or_or,group.by,
 
 
 CompGSEA<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=TRUE,save.pdf=NULL,width =7,height = 7){
-  require('pheatmap')
+  require('pheatmap::pheatmap')
   require('data.table')
   
   res_gsea1<-copy(res_gsea)
@@ -337,7 +493,7 @@ CompGSEA<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=TRUE,save.pdf=N
   
   if(!is.null(save.pdf)){
     pdf(save.pdf,width =7,height = 7)
-    print(pheatmap(mat_gsea,
+    print(pheatmap::pheatmap(mat_gsea,
                    breaks =col_breaks,
                    color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
                                                                          "RdBu")))(length(col_breaks)-1),
@@ -354,7 +510,7 @@ CompGSEA<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=TRUE,save.pdf=N
     dev.off()
     dev.off()
   }
-  return(pheatmap(mat_gsea,
+  return(pheatmap::pheatmap(mat_gsea,
                   breaks =col_breaks,
                   color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
                                                                         "RdBu")))(length(col_breaks)-1),
@@ -373,7 +529,7 @@ CompGSEA<-function(res_gsea,group.by,legend.compa=NULL,rm.refkey=TRUE,save.pdf=N
 
 CompGost<-function(res_enr,group.by,score='precision',col_max=1,
                    legend.compa=NULL,save.pdf=NULL,width =7,height = 7){
-  require('pheatmap')
+  require('pheatmap::pheatmap')
   require('data.table')
   
   res_enr1<-copy(res_enr)
@@ -418,7 +574,7 @@ CompGost<-function(res_enr,group.by,score='precision',col_max=1,
   
   if(!is.null(save.pdf)){
     pdf(save.pdf,width =7,height = 7)
-    print(pheatmap(mat_enr,
+    print(pheatmap::pheatmap(mat_enr,
                    breaks =col_breaks,
                    color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
                                                                          "RdYlBu")))(length(col_breaks)-1),
@@ -435,7 +591,7 @@ CompGost<-function(res_enr,group.by,score='precision',col_max=1,
     dev.off()
     dev.off()
   }
-  return(pheatmap(mat_enr,
+  return(pheatmap::pheatmap(mat_enr,
                   breaks =col_breaks,
                   color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
                                                                         "RdYlBu")))(length(col_breaks)-1),
@@ -503,7 +659,7 @@ CompDEGsPathways<-function(res_gsea,
   }
   col_breaks<-c(((col_range[1]*10):(col_range[2]*10))/10)
   if(show_pval){
-    print(pheatmap(dep_mat,
+    print(pheatmap::pheatmap(dep_mat,
                    breaks =col_breaks,
                    color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
                                                                          "RdBu")))(length(col_breaks)-1),
@@ -517,7 +673,7 @@ CompDEGsPathways<-function(res_gsea,
                    
                    fontsize_number = 8))
   }else{
-    print(pheatmap(dep_mat,
+    print(pheatmap::pheatmap(dep_mat,
                    breaks =col_breaks,
                    color=colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name =
                                                                          "RdBu")))(length(col_breaks)-1),
