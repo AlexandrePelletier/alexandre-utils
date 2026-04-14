@@ -515,12 +515,19 @@ PathwaysSelection<-function(res_enr,interactive=TRUE,add_plot=NULL,plots_widths=
 }
 
 #return the enrichment data table filitred with your saved and new selected pathways
-EditPathwaysSelection<-function(res_enr,saved,group.by=NULL){
+EditPathwaysSelection<-function(res_enr,saved,group.by=NULL,force_edit=FALSE,filter_only=FALSE){
   
   
   selection.old<-saved$term|>unique()
-  res_enrnew<-res_enr[!query%in%unique(saved$query)]
-  if(nrow(res_enrnew)>0){
+  if(!force_edit){
+    res_enrnew<-res_enr[!query%in%unique(saved$query)]
+    
+  }else{
+    res_enrnew<-res_enr
+  }
+  
+  
+  if(nrow(res_enrnew)>0&!filter_only){
     
     res_enrnew[,selected:=term%in%selection.old]
     selection<-PathwaysSelection(res_enrnew,group.by =group.by,split.by = NULL)
@@ -533,7 +540,7 @@ EditPathwaysSelection<-function(res_enr,saved,group.by=NULL){
   
   res_enrf<-res_enr[term%in%selection]
   
-  if(length(setdiff(selection,selection.old))>0){
+  if(length(setdiff(selection,selection.old))>0|force_edit){
     res_enrf[,term_nice:=TidyPathwayNames(term,remove_gs_source = TRUE)]
     hm<-CompPathways(res_enrf,
                      group.by = 'query',pathw_col = 'term_nice',effect_col = 'log2FE',max_color = 3)
@@ -552,7 +559,7 @@ EditPathwaysSelection<-function(res_enr,saved,group.by=NULL){
         scale_color_gradient2(high = 'red3',low = 'blue2')+scale_y_discrete(limits=res_enrf[order(num)]$term_num|>unique())+
         labs(size='% of the gene-set',y='MSigDB GO/CP pathways',x='cell state signature')
       print(p)
-      to_rm<-readline(prompt = "to remove (the num, sep by any sep. to stop just leave empty):")|>str_extract('[0-9]+')|>as.numeric()
+      to_rm<-readline(prompt = "to remove (the num, sep by any sep. to stop just leave empty):")|>str_extract_all('[0-9]+')|>unlist()|>as.numeric()
       if(length(to_rm[!is.na(to_rm)])>0){
         res_enrf<-res_enrf[!num%in%to_rm]
         

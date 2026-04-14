@@ -27,6 +27,7 @@ qs<-function()system('qstat -u adpelle1')
 
 
 
+
 #detach_package
 detach_package <- function(pkg, character.only = FALSE)
 {
@@ -259,6 +260,131 @@ ReFormatDERes<-function(res_de,to='SEURAT'){
 
 
 #GGPLOT####
+
+#' Rescale a ggplot proportionally — theme text AND geom elements
+#'
+#' @param p           A ggplot object
+#' @param target_w    Target width in inches  (default 7)
+#' @param target_h    Target height in inches (default 5)
+#' @param base_w      Reference width  (default 7)
+#' @param base_h      Reference height (default 5)
+#' @param base_size   Base text size at reference dimensions (default 11)
+#' @param text_nudge  Absolute offset in pt added after proportional scaling (default 0).
+#'                    Use +2 to bump readability on small plots, -1 to tighten large ones.
+#' @param geom_nudge  Multiplicative correction on top of proportional geom scaling (default 1).
+#'                    Use 1.2 to make dots slightly bigger than pure scaling would give,
+#'                    0.8 to shrink them a little.
+scale_ggplot <- function(p,
+                         target_w   = 7,
+                         target_h   = 5,
+                         base_w     = 7,
+                         base_h     = 5,
+                         base_size  = 11,
+                         text_nudge = 0,
+                         geom_nudge = 1) {
+  
+  # ── 1. Scale factor (geometric mean of w and h ratios) ──────────────────────
+  scale_factor <- sqrt((target_w / base_w) * (target_h / base_h))
+  
+  # Resolve actual base size from the plot theme
+  plot_theme <- p$theme
+  plot_base  <- tryCatch(
+    plot_theme$text$size %||% ggplot2::theme_get()$text$size %||% base_size,
+    error = function(e) base_size
+  )
+  scale_factor <- (base_size * scale_factor) / plot_base
+  new_base     <- plot_base * scale_factor + text_nudge
+  
+  # ── 2. Theme rescaling (same as before) ─────────────────────────────────────
+  scale_text_el <- function(el, factor, nudge = 0) {
+    if (inherits(el, "element_text") && !is.null(el$size))
+      el$size <- el$size * factor + nudge
+    el
+  }
+  
+  scaled_theme <- ggplot2::theme(
+    text              = ggplot2::element_text(size = new_base),
+    plot.title        = scale_text_el(ggplot2::calc_element("plot.title",    plot_theme), scale_factor, text_nudge),
+    plot.subtitle     = scale_text_el(ggplot2::calc_element("plot.subtitle", plot_theme), scale_factor, text_nudge),
+    plot.caption      = scale_text_el(ggplot2::calc_element("plot.caption",  plot_theme), scale_factor, text_nudge),
+    axis.title.x      = scale_text_el(ggplot2::calc_element("axis.title.x",  plot_theme), scale_factor, text_nudge),
+    axis.title.y      = scale_text_el(ggplot2::calc_element("axis.title.y",  plot_theme), scale_factor, text_nudge),
+    axis.text.x       = scale_text_el(ggplot2::calc_element("axis.text.x",   plot_theme), scale_factor, text_nudge),
+    axis.text.y       = scale_text_el(ggplot2::calc_element("axis.text.y",   plot_theme), scale_factor, text_nudge),
+    legend.title      = scale_text_el(ggplot2::calc_element("legend.title",  plot_theme), scale_factor, text_nudge),
+    legend.text       = scale_text_el(ggplot2::calc_element("legend.text",   plot_theme), scale_factor, text_nudge),
+    legend.key.size   = grid::unit(1.2 * scale_factor, "lines"),
+    plot.margin       = ggplot2::margin(5.5 * scale_factor, 5.5 * scale_factor,
+                                        5.5 * scale_factor, 5.5 * scale_factor, "pt"),
+    axis.ticks.length = grid::unit(2.75 * scale_factor, "pt")
+  )
+  
+  # ── 3. Geom element rescaling ────────────────────────────────────────────────
+  # Params that control visual size in the plot area.
+  # We scale anything set as a fixed aesthetic (in geom$aes_params),
+  # as well as matching GeomDefaults for the geom type.
+  
+  # Which params to rescale, and how (multiplicative vs additive)
+  SIZE_PARAMS  <- c("size", "linewidth", "stroke",
+                    "pointsize", "fatten")
+  # "size" in geom_point = radius in mm; linewidth in geom_line = width in mm
+  
+  geom_factor <- scale_factor * geom_nudge
+  
+  # Deep-copy the plot so we don't mutate the original
+  p_out <- p
+  
+  for (i in seq_along(p_out$layers)) {
+    layer  <- p_out$layers[[i]]
+    params <- layer$aes_params   # fixed aesthetics set inside geom_*()
+    
+    for (param in intersect(names(params), SIZE_PARAMS)) {
+      p_out$layers[[i]]$aes_params[[param]] <- params[[param]] * geom_factor
+    }
+    
+    # Also patch geom-level defaults when the param was not explicitly set
+    # (i.e. the user relied on the geom's default size)
+    geom       <- layer$geom
+    geom_defs  <- geom$default_aes
+    
+    geom <- layer$geom
+geom_defs <- geom$default_aes
+
+for (param in intersect(names(geom_defs), SIZE_PARAMS)) {
+  if (!param %in% names(params)) {
+
+    val <- geom_defs[[param]]
+    
+    # unwrap quosure safely
+    if (rlang::is_quosure(val)) {
+      expr <- rlang::quo_get_expr(val)
+      
+      # only handle plain numerics
+      if (is.numeric(expr)) {
+        val <- expr
+      } else {
+        next  # skip things like from_theme(pointsize)
+      }
+    }
+    
+    # final safety check
+    if (!is.numeric(val)) next
+    
+    p_out$layers[[i]]$aes_params[[param]] <- val * geom_factor
+    
+  }
+}
+  }
+  
+  # ── 4. Return with scaled theme applied ─────────────────────────────────────
+  p_out + scaled_theme
+}
+
+# Null-coalesce operator (from rlang, or define manually)
+if (!exists("%||%")) {
+  "%||%" <- function(x, y) if (is.null(x)) y else x
+}
+
 
 bar_bw<-function()scale_fill_manual(values=c('black','grey'))
 bar_rb<-function(invert=FALSE)ifelse(invert,return(scale_fill_manual(values=c('royalblue3','orangered3'))),return(scale_fill_manual(values=c('orangered3','royalblue3'))))
@@ -926,7 +1052,7 @@ fwritevcf<-function(x,file,header,add_to_header=NULL){
 #QSUB FILES CREATION####
 
 
-CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modules=NULL,
+CreateJobFile<-function(cmd_list,file,log_file=NULL,log_filechilds=NULL,proj_name='tcwlab-adsp',modules=NULL,
                         loadBashrc=FALSE,conda_env=NULL,
                         micromamba_env=NULL,
                         cwd='.',
@@ -967,30 +1093,21 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modu
   CombStdOutErr_opt<-'-j y'
   maxHours_opt<-paste0('-l h_rt=',maxHours,':00:00')
   qlog<-paste('-o ',log_file)
-  if(!is.null(nThreads)){
-    nThreads_opt=paste('-pe omp',nThreads)
-    # if(micromamba_env=='pyscenic'){
-    #   
-    #  
-    # }
-  }else{
-    nThreads_opt=NULL
-    
-  }
   
-  if(!is.null(memPerCore)){
-    memPerCore_opt=paste0('-l mem_per_core=',memPerCore,'G')
-  }else{
-    memPerCore_opt=NULL
-    
-    }
   #create child qsub files if parallelize mode
   if(parallelize&length(cmd_list)>1){
     
     script_id=str_extract(filename,'^[0-9A-Za-z]+')
     scripts_dir<-file.path(projdir,'scripts')
-    childs_dir<-file.path(scripts_dir,paste0(script_id,'childs'))
-    childslog_dir<-file.path(projdir,'logs',paste0(script_id,'childs'))
+    
+    childs_dir<-file.path(scripts_dir,basename(filename)|>str_remove('.qsub$'))
+    if(is.null(log_filechilds)){
+      childslog_dir<-file.path('logs',dirname(log_file),basename(logfile0)|>str_remove('.log$'))
+      
+    }else{
+      childslog_dir<-dirname(log_filechilds[1])
+    }
+
     
    if(!dir.exists(childs_dir))dir.create(childs_dir,recursive = T)
     if(!dir.exists(childslog_dir))dir.create(childslog_dir,recursive = T)
@@ -1008,7 +1125,7 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modu
       if(!is.null(names(cmd_list))){
         child_jobnames<-make.names(names(cmd_list))
       }else{
-        child_jobnames<-paste0(script_id,'-child',1:length(cmd_list))
+        child_jobnames<-paste0(basename(filename),'_child',1:length(cmd_list))
       }
     
     child_jobfiles<-file.path(childs_dir,paste0(child_jobnames,'.qsub'))
@@ -1023,7 +1140,14 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modu
     cmds<-sapply(1:n_jobs,function(i){
       
       cmds_child<-cmd_list_jobs[[i]]
-      logfile_child<-file.path(childslog_dir,basename(child_jobfiles[i])|>str_replace('.qsub','.log'))
+      if(!is.null(log_filechilds)){
+        logfile_child<-log_filechilds[i]
+        child_jobfiles[i]<-file.path(childs_dir,basename(log_filechilds[i])|>str_replace('.log$','.qsub'))
+        
+      }else{
+        logfile_child<-file.path(childslog_dir,basename(child_jobfiles[i])|>str_replace('.qsub','.log'))
+        
+      }
       CreateJobFile(cmd_list =cmds_child,file = child_jobfiles[i],
                     log_file=logfile_child,
                     cwd = cwd,
@@ -1059,6 +1183,23 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,proj_name='tcwlab-adsp',modu
     
   }else{
     #add the core job parameters
+      if(!is.null(nThreads)){
+      nThreads_opt=paste('-pe omp',nThreads)
+      # if(micromamba_env=='pyscenic'){
+      #   
+      #  
+      # }
+    }else{
+      nThreads_opt=NULL
+      
+    }
+    
+    if(!is.null(memPerCore)){
+      memPerCore_opt=paste0('-l mem_per_core=',memPerCore,'G')
+    }else{
+      memPerCore_opt=NULL
+      
+    }
   cat( '#Parameters of the Jobs :',file = file_path,append = T)
   cat( c('\n',proj_name_opt,CombStdOutErr_opt,maxHours_opt,qlog,nThreads_opt,memPerCore_opt),file = file_path,append = T,sep = '\n#$')
   cat( c('\n',additional_cmds,'\n'),
@@ -1297,6 +1438,52 @@ CreateJobForPyfile<-function(py_file,qsub_file=NULL,args=NULL,
   
 }
 
+shorten<-function(x,width=20)make.names(str_trunc(basename(str_remove(unlist(x),'^[0-9A-Za-z]+-')),width = width,ellipsis = ''))
+
+#firstdiffchars: identify the first different character between element of a character vector
+firstdiffchars<- function(x) {
+  if (length(x) <= 1) return(x)
+  
+  # Only need min & max after sorting to get common prefix
+  sx <- sort(x)
+  first <- sx[1]
+  last  <- sx[length(sx)]
+  min_length<-min(str_length(c(first,last)))
+  i=which(strsplit(first,'')[[1]][1:min_length]!=strsplit(last,'')[[1]][1:min_length])
+  imin<-ifelse(length(i)>0,i[1],1)
+  return(imin)
+}
+
+#LogFileNames: for args list containing arg1X (character or vector of characters Rscript file.R arg1i ) and argsups return the log names for each arg1 element and the argsups in shortnames
+
+LogFileNames<-function(logfile0,args){
+  
+  outlog<-file.path('logs',dirname(logfile0),basename(logfile0)|>str_remove('.log$'))
+  dir.create(outlog,showWarnings = FALSE)
+  diffcharpos<-firstdiffchars(basename(str_remove(unlist(args[[1]]),'^[0-9A-Za-z]+-')))
+  logs<-sapply(1:length(args[[1]]), function(i){
+    arg1<-basename(str_remove(unlist(args[[1]][i]),'^[0-9A-Za-z]+-'))
+    
+    params_name<-paste0(shorten(substr(arg1,max(c(diffcharpos-5,1)),str_length(arg1))),'_',i)
+    
+    j<-1
+    while(length(args)>j){
+      j<-j+1
+      argsup<-args[[j]]
+      
+      params_name<-paste(params_name,shorten(argsup),sep='_')
+      
+    }
+    
+    
+    log_filearg<-file.path(outlog,paste0(params_name,'.log'))
+    
+    return(log_filearg)
+  })
+  
+  return(logs)
+}
+
 
 #CreateJobForRfile~~~~
 #create job to execute an R file using Rscript rfile.R [args]
@@ -1308,7 +1495,7 @@ CreateJobForPyfile<-function(py_file,qsub_file=NULL,args=NULL,
 CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
                             parallelize=NULL,maxChildJobs=60,
                             proj_name='tcwlab-adsp',
-                            modules='R/4.4.0',
+                            modules='R/4.4.3',
                             loadBashrc=FALSE,conda_env=NULL,micromamba_env=NULL,
                             nThreads=4,memPerCore=NULL,maxHours=24,
                             additional_cmds=NULL){
@@ -1323,8 +1510,23 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
   }
   
   if(is.null(qsub_file)){
-    qsub_file<-str_replace(r_file,'\\.R$','.qsub')
-  }
+    if(is.null(args)){
+      qsub_file<-str_replace(r_file,'\\.R$','.qsub')
+      
+    }else if(length(args)==1&length(args[[1]])==1){
+      qsub_file<-paste0(str_remove(r_file,'\\.R$'),shorten(args[[1]]),'.qsub')
+      
+    }else if(length(args)>1&length(args[[1]])>1){
+      qsub_file<-paste0(str_remove(r_file,'\\.R$'),shorten(args[2:length(args)]),'.qsub')
+      
+    }else if(length(args)>1&length(args[[1]])==1){
+      qsub_file<-paste0(str_remove(r_file,'\\.R$'),shorten(args[1:length(args)]),'.qsub')
+      
+    }else{
+      qsub_file<-str_replace(r_file,'\\.R$','.qsub')
+      
+    }
+    }
   
   filename<-basename(qsub_file)
   projdir<-dirname(qsub_file)
@@ -1339,56 +1541,29 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
   
   #create the Rscript cmds to exec
   if(is.null(args)){
+
     cmds<-paste('Rscript',r_file,'>>',log_file)
+    log_filechilds=NULL
     
   }else{
-    
-    
+    log_filechilds<-LogFileNames(log_file,args)
     args<-lapply(args, function(arg)sapply(arg,function(x)paste0("'",x,"'")))
    
     
   cmds<-lapply(1:length(args[[1]]), function(i){
     arg1<-args[[1]][i]
    
-    params_name<-paste0(make.names(str_trunc(basename(arg1),width = 10,ellipsis = '')),'.',i)
-    j<-1
-    while(length(args)>j){
-      j<-j+1
-      argsup<-args[[j]]
-      
-      params_name<-paste(params_name,make.names(tools::file_path_sans_ext(str_trunc(basename(argsup),width = 10,ellipsis = ''))),sep='_')
-      
-    }
-    
-    # qsub_file<<-paste0(str_replace(qsub_file0,'.qsub$','_'),
-    #                    params_name,'.qsub')
-    # 
-    # 
-     log_filearg<-paste0(str_replace(log_file,'.log$','_'),params_name,'.log')
-
     cmd<-paste('Rscript',r_file,arg1,paste(unlist(args[-1]),
-                                           collapse = ' '),'>>',log_filearg)
+                                           collapse = ' '),'>>',log_filechilds[i])
     return(cmd)
   })
-  arg1_names<-str_trunc(basename(as.character(args[[1]])),width = 10,ellipsis = '')
- 
-  names(cmds)<-paste0('el',1:length(args[[1]]),'_',arg1_names)
+  
 
-    
+  names(cmds)<-str_remove(basename(log_filechilds),'^[0-9-]+')
 
   
-  
-  #identify the commands with supplemental parameters if present
-  i<-1
-  while(length(args)>i){
-    i<-i+1
-    argsup<-args[[i]]
-    
-    names(cmds)<-paste(names(cmds),make.names(tools::file_path_sans_ext( str_trunc(basename(argsup),width = 10,ellipsis = ''))),sep='_')
-    
   }
   
-  }
 
   #show the first R lines
   message('the 15 firsts R lines to executes')
@@ -1396,6 +1571,7 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
   
   #pass the argument to createJobFile
   CreateJobFile(cmds,file = qsub_file,log_file = log_file,
+                log_filechilds = log_filechilds,
                 proj_name = proj_name ,
                 modules = modules ,micromamba_env = micromamba_env ,conda_env = conda_env ,
                 nThreads=nThreads,memPerCore=memPerCore,maxHours=maxHours,
@@ -1405,6 +1581,10 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
                 additional_cmds=additional_cmds)
   
 }
+
+
+
+
 
 RunQsub<-function(qsub_file=NULL,job_name=NULL,proj_name=NULL,wait_for=NULL,dryrun=FALSE){
   if(is.null(qsub_file)){
@@ -1528,7 +1708,7 @@ bed_inter<- function(a, b, opt1="-wa",
     x<-l[[i]]
     if(is.data.frame(x)){
       files_to_rm[i]<-TRUE
-      file_path<-fp(out_dir,paste0("temp",i,".bed"))
+      file_path<-file.path(out_dir,paste0("temp",i,".bed"))
       fwrite(x,file_path,sep="\t",col.names = FALSE,scipen = 999)
       
     }else{
@@ -1537,7 +1717,7 @@ bed_inter<- function(a, b, opt1="-wa",
     return(file_path)
   })
   
-  out_file<-fp(out_dir,"temp_inter.bed")
+  out_file<-file.path(out_dir,"temp_inter.bed")
   cmd<-paste("bedtools intersect -a",file_paths[1],"-b",file_paths[2], opt1, opt2,">",out_file)
   message("run in shell : ",cmd)
   system(cmd)
@@ -1587,13 +1767,13 @@ CountBEDOverlap<-function(bed_files,genomic_regions_file,
   cmds<-lapply(bed_files, function(b){
     paste('bedtools intersect -c',opt1,opt2,'-a',genomic_regions_file,
           '-b',b,'|gzip -c >',
-          fp(out_dir,ps(tools::file_path_sans_ext(basename(b)),'.',tools::file_path_sans_ext(basename(genomic_regions_file)),
+          file.path(out_dir,ps(tools::file_path_sans_ext(basename(b)),'.',tools::file_path_sans_ext(basename(genomic_regions_file)),
                         '.overlap.count.bed.gz')))
   })
   
   if(is.null(job_file)){
     
-    #job_file<-fp('scripts',ps('counts_overlap_',tools::file_path_sans_ext(bed_files[1],'_andCo_with_',tools::file_path_sans_ext(basename(genomic_regions_file)),'.qsub')))
+    #job_file<-file.path('scripts',ps('counts_overlap_',tools::file_path_sans_ext(bed_files[1],'_andCo_with_',tools::file_path_sans_ext(basename(genomic_regions_file)),'.qsub')))
     
     for(cmd in cmds){
       message('running ',cmd)
@@ -1620,7 +1800,7 @@ CountBEDOverlap<-function(bed_files,genomic_regions_file,
     
   }
   
-  count_files<- fp(out_dir,ps(tools::file_path_sans_ext(basename(bed_files)),'.',tools::file_path_sans_ext(basename(genomic_regions_file)),
+  count_files<- file.path(out_dir,ps(tools::file_path_sans_ext(basename(bed_files)),'.',tools::file_path_sans_ext(basename(genomic_regions_file)),
                               '.overlap.count.bed.gz'))
   
   return(count_files)
