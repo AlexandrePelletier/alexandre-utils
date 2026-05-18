@@ -27,6 +27,12 @@ qs<-function()system('qstat -u adpelle1')
 
 
 
+rev_comp <- function(seq) {
+  require(Biostrings)
+  
+  as.character(reverseComplement(DNAStringSet(seq)))
+}
+
 
 #detach_package
 detach_package <- function(pkg, character.only = FALSE)
@@ -181,11 +187,18 @@ GetVarPCs<-function(pca,rngPCs="all"){
 
 
 #Reformatting classical R data/results ####
-TidyPathwayNames<-function(PATHWAYS,remove_gs_source=FALSE,wrap_text_size=80){
-  tidypathways<-PATHWAYS|>str_replace('_',':')|>str_replace_all('_',' ')|>str_to_title()|>str_wrap(width = wrap_text_size)
+TidyPathwayNames<-function(PATHWAYS,remove_gs_source=FALSE,wrap_text_size=NULL,trim_text_size=80){
+  tidypathways<-PATHWAYS|>str_replace('_',':')|>str_replace_all('_',' ')|>str_to_title()|>str_trunc(width =trim_text_size,ellipsis = '...' )
+
+  if(!is.null(wrap_text_size)){
+    tidypathways<-str_wrap(tidypathways,width =trim_text_size)
+    
+  }
   if(remove_gs_source){
     return(tidypathways|>str_remove('[A-Za-z]+:'))
   }else{
+    tidypathways_list<-strsplit(tidypathways,'\\:')
+    tidypathways<-paste0(sapply(tidypathways_list,function(x)str_to_upper(x[1])),':',sapply(tidypathways_list,function(x)x[2]))
     return(tidypathways)
   }
 }
@@ -1517,7 +1530,7 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
       qsub_file<-paste0(str_remove(r_file,'\\.R$'),shorten(args[[1]]),'.qsub')
       
     }else if(length(args)>1&length(args[[1]])>1){
-      qsub_file<-paste0(str_remove(r_file,'\\.R$'),shorten(args[2:length(args)]),'.qsub')
+      qsub_file<-paste0(str_remove(r_file,'\\.R$'),paste(shorten(args[2:length(args)]),collapse = '_'),'.qsub')
       
     }else if(length(args)>1&length(args[[1]])==1){
       qsub_file<-paste0(str_remove(r_file,'\\.R$'),shorten(args[1:length(args)]),'.qsub')

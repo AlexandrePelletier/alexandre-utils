@@ -152,10 +152,10 @@ CompZ2<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
     cols_mtd<-c('group',union(group.by,legend.compa))
     mtd_compa<-unique(x[,.SD,.SDcols=cols_mtd])
     mtd_compa[,group:=make.names(group)]
-    mtd_compa<-data.frame(mtd_compa,row.names = 'group')[,legend.compa,drop=F]
+    mtd_compa<-data.frame(mtd_compa,row.names = 'group')[colnames(matz),legend.compa,drop=F]
     if(is.null(annotation_colors)){
       ha <- HeatmapAnnotation(
-        df = mtd_compa,
+        df = mtd_compa
       )
     }else{
       ha <- HeatmapAnnotation(
@@ -176,7 +176,7 @@ CompZ2<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
 
 
 # ---- Color scale (breaks + colors) ----
-col_fun <- colorRamp2(col_breaks, colors)
+col_fun <- circlize::colorRamp2(col_breaks, colors)
 
 
 
@@ -691,6 +691,174 @@ CompDEGsPathways<-function(res_gsea,
   
   
   
+}
+
+#ModulesHeatmap####
+#gene_modules/cell_module: module for  gene i /cell j of mat i*j, will order the modules according to
+#module_colors: named vector of colors for each modules
+#anno_genes/anno_cells : data.frame of annot for each genes/ cells
+#col_genes/col_cells : named list of colors for each annot. (colors have to be named, for categorical) 
+ModulesHeatmap<-function(mat,gene_modules,cell_modules,genes_to_label,
+                         module_title='Module',module_colors=NULL,
+                         anno_cells=NULL,col_cells=NULL,
+                         anno_genes=NULL,col_genes=NULL,
+                         clamp=c(-2,3),width=5,height=6,fontsize=7){
+  require(ComplexHeatmap)
+  ## Clamp pour rester dans [-2, 3]
+  mat <- pmax(pmin(mat, clamp[2]), clamp[1])
+  
+  # ── 3. ANNOTATIONS ──────────────────────────────────────────
+  n_genes=nrow(mat)
+  n_cells=ncol(mat)
+  n_modules=length(table(gene_modules))
+
+  all_module_levels <- sort(union(gene_modules, cell_modules))
+  
+  if(all(str_detect(all_module_levels,'[0-9]'))){
+    all_module_levels<-all_module_levels[order(as.numeric(str_extract(all_module_levels,'[0-9]+')))]
+    
+  }
+  
+  gene_modules <- factor(gene_modules, levels = all_module_levels)
+  cell_modules <- factor(cell_modules, levels = all_module_levels)
+
+  ## Palette modules
+  if(is.null(module_colors)){
+    module_colors <- setNames(
+      colorRampPalette(RColorBrewer::brewer.pal(length(all_module_levels), "Paired"))(length(all_module_levels)),
+      all_module_levels
+    )
+  }
+  
+  
+
+  if(is.null(anno_cells)){
+    anno_cells=data.frame(foo=1:length(cell_modules))
+  }
+  anno_cells[[module_title]]=cell_modules
+  
+
+  if('foo'%in%colnames(anno_cells)){
+    anno_cells[['foo']]<-NULL
+  }
+  
+  
+  if(is.null(col_cells)){
+    col_cells=list()
+  }
+  
+  col_cells[[module_title]]=module_colors
+  
+  ## Annotation colonnes (cellules)
+  col_ann <- HeatmapAnnotation(
+    df = anno_cells,
+    col    = col_cells,
+    annotation_name_side = "left",
+    show_legend = TRUE
+  )
+  
+  
+  
+  if(is.null(anno_genes)){
+    anno_genes=data.frame(foo=1:length(gene_modules))
+  }
+  anno_genes[[module_title]]=gene_modules
+  
+  if('foo'%in%colnames(anno_genes)){
+    anno_genes[['foo']]<-NULL
+  }
+  
+  if(is.null(col_genes)){
+    col_genes=list()
+  }
+  
+  col_genes[[module_title]]=module_colors
+  
+  ## Annotation lignes (gènes)
+  row_ann <- rowAnnotation(
+    df = anno_genes,
+    col    = col_genes,
+    show_legend = FALSE
+  )
+  
+  # ── 4. LABELS DE GÈNES SÉLECTIONNÉS ─────────────────────────
+  
+  labeled_genes <- unlist(genes_to_label)
+  
+  ## Position de chaque gène labellé dans la matrice
+  label_idx <- match(labeled_genes, rownames(mat))
+  label_idx <- label_idx[!is.na(label_idx)]
+  
+  ## Annotation texte sur la droite
+  gene_label_ann <- rowAnnotation(
+    Genes = anno_mark(
+      at    = label_idx,
+      labels = rownames(mat)[label_idx],
+      labels_gp = gpar(fontsize = fontsize, fontface = "italic"),
+      link_width = unit(4, "mm"),
+      padding    = unit(1, "mm")
+    )
+  )
+  
+  # ── 5. PALETTE DE COULEURS ───────────────────────────────────
+  
+  col_fun <- circlize::colorRamp2(
+    breaks = c(-2, -0.5, 0, 0.5, 1.5, 3),
+    colors = c("#2166AC", "#92C5DE", "#F7F7F7", "#FDDBC7", "#D6604D", "#B2182B")
+  )
+  
+  # ── 6. DESSIN DE LA HEATMAP ─────────────────────────────────
+  
+  ht <- Heatmap(
+    mat,
+    name = "Scaled\nexpression",
+    
+    ## Couleurs
+    col = col_fun,
+    
+    ## Annotations
+    top_annotation   = col_ann,
+    left_annotation  = row_ann,
+    right_annotation = gene_label_ann,
+    
+    ## Pas de clustering (ordre par module voulu)
+    cluster_rows    = FALSE,
+    cluster_columns = FALSE,
+    
+    ## Séparateurs entre modules
+    row_split    = gene_modules,
+    column_split = cell_modules,
+    row_gap      = unit(1, "mm"),
+    column_gap   = unit(1, "mm"),
+    
+    ## Titres de blocs
+    row_title_gp    = gpar(fontsize = fontsize+1, fontface = "bold"),
+    column_title_gp = gpar(fontsize = fontsize+1, fontface = "bold"),
+    row_title_rot   = 0,
+    
+    ## Noms de gènes / cellules masqués (trop nombreux)
+    show_row_names    = FALSE,
+    show_column_names = FALSE,
+    
+    ## Légende
+    heatmap_legend_param = list(
+      title_gp    = gpar(fontsize = fontsize+2, fontface = "bold"),
+      labels_gp   = gpar(fontsize = fontsize+2),
+      legend_height = unit(0.5, "in")
+    ),
+    
+    ## Taille de la figure
+    width  = unit(width, "in"),
+    height = unit(height, "in")
+  )
+  
+  # ── 7. EXPORT ────────────────────────────────────────────────
+  
+  return(draw(ht,
+              heatmap_legend_side = "right",
+              annotation_legend_side = "right",
+              merge_legend = TRUE
+  ))
 }
 
 

@@ -202,6 +202,12 @@ emmaplot<-function(res_fgsea,
   require('ggrepel')
   if(!'data.table'%in%class(res_fgsea)){
     res_fgsea<-data.table(res_fgsea)
+  }else{
+    res_fgsea<-copy(res_fgsea)
+    
+  }
+  if(!is.null(pathway_col)){
+    res_fgsea<-copy(res_fgsea[,pathway:=.SD,.SDcols=pathway_col])
   }
   
   if(!is.null(cols_lims)&length(cols)>2){
@@ -225,11 +231,7 @@ emmaplot<-function(res_fgsea,
   }
 
   
-  
-  if(!'pathway'%in%colnames(res_fgsea)){
-    stop('expected format: fgsea results or overrepresentation results (OR3) format')
-  }
-  
+
  
     if(all(table(res_fgsea[[col.var]])>1)|!is.numeric(res_fgsea[[col.var]])){
       
@@ -411,8 +413,8 @@ ClusterPathways<-function(x,resolution=1,method='leiden',weights=NULL,min_edge=0
       stop('only leiden and louvain method implemented yet')
     }
     
-    return(merge(data.table(pathway=cl$names,cluster=cl$membership),
-                 x,by='pathway',all.y=TRUE))
+    return(merge(x,data.table(pathway=cl$names,cluster=cl$membership),
+                by='pathway',all.x=TRUE)[x$pathway,on='pathway'])
     
   }else{
     warning('only one pathway provided, return NA')
@@ -428,7 +430,7 @@ ClusterPathways<-function(x,resolution=1,method='leiden',weights=NULL,min_edge=0
 #interactive: add or edit the pathways selected (with +/-)
 #add_plot: which additional metric to color by the pathways on the graph. if a plot, just plot next to the graph
 #split.by: from which variable to split by the emmaplot to select step by step. NA/0 no spliting
-PathwaysSelection<-function(res_enr,interactive=TRUE,add_plot=NULL,plots_widths=c(1,1),
+PathwaysSelection<-function(res_enr,interactive=TRUE,add_plot=NULL,plots_widths=c(1,1),auto_select_top_cluster=FALSE,
                             resolution =1,min_edge=0.2,pathway_col=NULL,split.by='cluster',group.by=NULL){
   res_enr<-FormatEnrichmentRes(copy(res_enr),pathway_col = pathway_col)
   
@@ -438,7 +440,6 @@ PathwaysSelection<-function(res_enr,interactive=TRUE,add_plot=NULL,plots_widths=
     res_enr[,selected:=FALSE]
   }
   
-  selection<-res_enr[(selected)]$pathway
   
   if(is.null(group.by)){
     res_enr[,group:=0]
@@ -447,20 +448,29 @@ PathwaysSelection<-function(res_enr,interactive=TRUE,add_plot=NULL,plots_widths=
     
   }
   
+  selection<-res_enr[(selected)]$pathway
+  
+  
   for(g in unique(res_enr$group)){
     message(g)
     res_enrf<-copy(res_enr[group==g])
     res_enrf<-res_enrf[order(pval)]
     res_enrf[,pathway_num:=1:.N]
     res_enrf[,pathway_with_num:=paste(pathway_num,pathway,sep='-')]
+    res_enrf<-ClusterPathways(res_enrf,resolution = resolution ,min_edge = min_edge,pathway_col = 'pathway_with_num')
+    res_enrf[,pathway:=str_remove(pathway,'^[0-9]+-')]
+    res_enrf[is.na(cluster),cluster:=0]
     
+    if(auto_select_top_cluster){
+      res_enrf[,selected:=rank(pval)==1,by='cluster']
+      selection<-union(selection,res_enrf[(selected)]$pathway)
+    }
     # cluster pathways
     if(is.null(split.by)){
       res_enrf[,split:=0]
       
     }else if(split.by=='cluster'){
-      res_enrf<-ClusterPathways(res_enrf,resolution = resolution ,min_edge = min_edge,pathway_col = 'pathway_with_num')
-      res_enrf[is.na(cluster),cluster:=0]
+
       res_enrf[,split:=cluster]
       
     }else if(all(split.by%in%colnames(res_enrf))){
@@ -490,19 +500,22 @@ PathwaysSelection<-function(res_enr,interactive=TRUE,add_plot=NULL,plots_widths=
         }else{
           print(p1)
         }
-        
-        edit<-readline(prompt = 'pathways selection:')
-        
-        torm<-str_extract_all(edit,'\\-[0-9]+')|>unlist()|>str_extract('[0-9]+')|>as.numeric()
-        toadd<-strsplit(edit,'\\+|\\-')|>unlist()|>as.numeric()
-        toadd<-setdiff(toadd,torm)
-        
-        
-        selection<-union(setdiff(selection,res_enrf[pathway_num%in%torm]$pathway),
-                         res_enrf[pathway_num%in%toadd]$pathway)
-        print(selection)
-        res_enr[pathway%in%selection,selected:=TRUE]
-        res_enrf[pathway%in%selection,selected:=TRUE]
+        if(interactive){
+          edit<-readline(prompt = 'pathways selection:')
+          
+          torm<-str_extract_all(edit,'\\-[0-9]+')|>unlist()|>str_extract('[0-9]+')|>as.numeric()
+          toadd<-strsplit(edit,'\\+|\\-')|>unlist()|>as.numeric()
+          toadd<-setdiff(toadd,torm)
+          
+          
+          selection<-union(setdiff(selection,res_enrf[pathway_num%in%torm]$pathway),
+                           res_enrf[pathway_num%in%toadd]$pathway)
+          print(selection)
+          
+          res_enr[pathway%in%selection,selected:=TRUE]
+          res_enrf[pathway%in%selection,selected:=TRUE]
+        }
+
         
       }
     
