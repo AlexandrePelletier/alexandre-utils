@@ -1471,7 +1471,7 @@ firstdiffchars<- function(x) {
 
 LogFileNames<-function(logfile0,args){
   
-  outlog<-file.path('logs',dirname(logfile0),basename(logfile0)|>str_remove('.log$'))
+  outlog<-file.path(dirname(logfile0),basename(logfile0)|>str_remove('.log$'))
   dir.create(outlog,showWarnings = FALSE)
   diffcharpos<-firstdiffchars(basename(str_remove(unlist(args[[1]]),'^[0-9A-Za-z]+-')))
   logs<-sapply(1:length(args[[1]]), function(i){
@@ -1560,6 +1560,8 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
     
   }else{
     log_filechilds<-LogFileNames(log_file,args)
+    print(length(log_filechilds))
+    
     args<-lapply(args, function(arg)sapply(arg,function(x)paste0("'",x,"'")))
    
     
@@ -1568,13 +1570,14 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
    
     cmd<-paste('Rscript',r_file,arg1,paste(unlist(args[-1]),
                                            collapse = ' '),'>>',log_filechilds[i])
+    print(cmd)
     return(cmd)
   })
-  
 
-  names(cmds)<-str_remove(basename(log_filechilds),'^[0-9-]+')
 
-  
+  names(cmds)<-str_remove(basename(log_filechilds), "^[0-9-]+")
+
+
   }
   
 
@@ -2028,6 +2031,103 @@ strflip<-function(x){
              'G'='C')
   return(unlist(conv[x]))
 }
+
+
+#get Unified locis
+#loci: data.table with 'variant_id' and $locus_col
+#locus_col: column in data.table containing the locus id to overlap.
+#overlap_col: if already computed, column in data.table containing the locus_id
+#group.by: by which column(s) to separate unification of loci
+UnifyLoci<-function(loci,variant_col='variant_id',
+                    locus_col='locuscontext_id',group.by=NULL,
+                    order.by='pos',order.by.ascending=TRUE,
+                    overlap_col=NULL,rm_overlap=TRUE){
+  if(variant_col!='variant_id'){
+    loci$variant_id<-loci[[variant_col]]
+    
+  }
+  
+  if(locus_col!='locus_id'){
+    loci$locus_id<-loci[[locus_col]]
+    
+  }
+  
+  
+  
+  if(is.null(overlap_col)){
+    loci[,overlapping_locus.var:=paste(unique(locus_id),collapse ='|'),by='variant_id']
+    
+    loci[,overlapping_locus:=paste(setdiff(unlist(strsplit(overlapping_locus.var,'\\|')),locus_id),collapse = '|'),by=locus_col]
+    
+    
+  }else{
+    loci$overlapping_locus<-loci[[overlap_col]]
+    
+  }
+  loci_u<-unique(loci,by=locus_col)
+  if(order.by=='pos'){
+    loci_u<-loci_u[order(seqid(variant_id),pos(variant_id))]
+  }else{
+    setorderv(loci_u,cols = order.by,order = as.numeric(order.by.ascending))
+    
+  }
+  
+  
+  if(!is.null(group.by)){
+    loci_u[,group:=apply(.SD,1,function(x)paste(x,collapse = '.')),.SDcols=group.by]
+    
+  }
+  
+  loci_u[,uni.locus_id:={
+    if(!is.null(group.by)){
+      pref.loc=unique(group)
+    }else{
+      pref.loc='loc'
+    }
+    
+    #get the different sets list
+    #set number back to the locus
+    #for each gwasoverlap, if intersect, i create the union 
+    overlaps_list<-strsplit(overlapping_locus,'\\|')
+    overlaps_list<-lapply(1:.N, function(i)c(overlaps_list[[i]],locus_id[i]))
+    overlap_set_num<-1:.N
+    already_set<-c()
+    for(i in 1:.N){
+      if(!i%in%already_set){
+        overlap_set_num[i]<-i
+        already_set<-c(already_set,i)
+      }
+      if(.N>1){
+        for(j in 2:.N){
+          
+          if(length(intersect(overlaps_list[[overlap_set_num[i]]],
+                              overlaps_list[[overlap_set_num[j]]]))>0){
+            overlaps_list[[overlap_set_num[i]]]<-union(overlaps_list[[overlap_set_num[i]]],overlaps_list[[overlap_set_num[j]]])
+            
+            overlap_set_num[j]<-overlap_set_num[i]
+            already_set<-c(already_set,j)
+          }
+          
+        }
+      }
+      
+    }
+    paste(pref.loc,overlap_set_num,sep='_')
+    
+  },by=group.by]
+  
+  loci<-merge(loci,loci_u[,.SD,.SDcols=c(locus_col,group.by,'uni.locus_id')],by=c(locus_col,group.by))
+  if(rm_overlap){
+    loci<-loci[,-c('overlapping_locus.var','overlapping_locus')]
+    if(!is.null(overlap_col)){
+      loci[[overlap_col]]<-NULL
+    }
+  }
+  return(loci)
+}
+
+
+
 #Interaction with bash####
 #bgzip
 #compressed in bed.gz like table

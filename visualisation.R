@@ -47,6 +47,8 @@ CompZ<-function(x,group.by,covcol='cov',zcol='zscore',pvalcol='padj',
  
     matp<-dcast(x,cov~group,value.var ='padjsig')|>data.frame(row.names = 'cov')
     
+  }else{
+    matp<-FALSE
   }
   
 
@@ -328,6 +330,7 @@ CompPathways<-function(res_gsea_or_or,group.by,
                        legend.compa=NULL,
                        legend.pathway=NULL,
                        rm.refkey=FALSE,
+                       show_pval=TRUE,
                        pval_col='padj',effect_col='NES',pathw_col='pathway',
                        padj_sig_thr=0.1,
                        padj_sugg_thr=0.25,
@@ -339,7 +342,7 @@ CompPathways<-function(res_gsea_or_or,group.by,
                        show_NA=TRUE,
                        width =7,height = 7,max_color=2,
                        cellwidth=16,cluster_cols=TRUE,
-                       cluster_rows=TRUE,main=NULL,fontsize_number=10,...){
+                       cluster_rows=TRUE,main=NULL,fontsize_row=7,fontsize_number=10,...){
   require('pheatmap')
   require('data.table')
   res_gsea1<-copy(res_gsea_or_or)
@@ -367,23 +370,27 @@ CompPathways<-function(res_gsea_or_or,group.by,
   mat_gsea[is.na(mat_gsea)]<-na_value
 
 
-  
-  #add pvalue
-  res_gsea1[,padj:=.SD,.SDcols=pval_col]
-  if(is.null(signif_col)){
-    res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<padj_sig_thr,'*',ifelse(padj<padj_sugg_thr,'.',''))))]
+  if(show_pval){
+    #add pvalue
+    res_gsea1[,padj:=.SD,.SDcols=pval_col]
+    if(is.null(signif_col)){
+      res_gsea1[,padjsig:=ifelse(padj<0.001,'***',ifelse(padj<0.01,'**',ifelse(padj<padj_sig_thr,'*',ifelse(padj<padj_sugg_thr,'.',''))))]
+      
+    }else{
+      res_gsea1[,padjsig:=.SD,.SDcols=signif_col]
+      
+    }
+    res_gsea1[is.na(padj),padjsig:='']
+    mat_gseap<-data.frame(dcast(res_gsea1,pathw~comp,value.var ='padjsig'),row.names = 'pathw')[rownames(mat_gsea),colnames(mat_gsea)]
     
+    if(!show_NA){
+      mat_gseap[is.na(mat_gseap)]<-''
+      
+    }
   }else{
-    res_gsea1[,padjsig:=.SD,.SDcols=signif_col]
-    
+    mat_gseap<-FALSE
   }
-  res_gsea1[is.na(padj),padjsig:='']
-  mat_gseap<-data.frame(dcast(res_gsea1,pathw~comp,value.var ='padjsig'),row.names = 'pathw')
   
-  if(!show_NA){
-    mat_gseap[is.na(mat_gseap)]<-''
-    
-  }
   
   color_gradient <- colorRampPalette(colors)
   
@@ -438,9 +445,9 @@ CompPathways<-function(res_gsea_or_or,group.by,
   return(pheatmap::pheatmap(mat_gsea,
                  breaks =col_breaks,
                  color=colors,
-                 fontsize_row = 7,
+                 fontsize_row = fontsize_row,
                  main=main,
-                 display_numbers = mat_gseap[rownames(mat_gsea),colnames(mat_gsea)],
+                 display_numbers = mat_gseap,
                  number_color = 'white',
                  cluster_cols = cluster_cols,
                  cellwidth =cellwidth,

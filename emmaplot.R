@@ -12,8 +12,7 @@ library(data.table)
 
 LeadingEdges<-function(res_fgsea){
     if(is.character(res_fgsea$leadingEdge)){
-      l_genes<-str_extract_all(res_fgsea$leadingEdge,'[A-Za-z0-9]+')
-      l_genes<-lapply(l_genes, function(x)x[x!='c'])
+      l_genes<-strsplit(res_fgsea$leadingEdge,'\\|')
     }else{
       l_genes<-res_fgsea$leadingEdge
     }
@@ -34,24 +33,63 @@ overlap_ratio <- function(x, y) {
 }
 
 
-get_similarity_matrix <- function(leading_edge_list) {
+get_similarity_matrix <- function(genesets) {
+  # w=sapply(genesets, function(x)sapply(genesets, function(y)length(intersect(x,y))/length(union(x,y))))
+  # w[lower.tri(w,diag = TRUE)]=NA
+  # 
+  require(Matrix)
   
-  n <- length(leading_edge_list)
-  ids<-names(leading_edge_list)
-  w <- matrix(NA, nrow=n, ncol=n)
-  colnames(w) <- rownames(w) <- names(leading_edge_list)
+  # Example:
+  # genesets is a named list
+  # genesets <- list(
+  #   GS1 = c("A","B","C"),
+  #   GS2 = c("B","C","D"),
+  #   GS3 = c("X","Y")
+  # )
   
-  for (i in seq_len(n-1)) {
-    for (j in (i+1):n) {
-      w[i,j] <- overlap_ratio(leading_edge_list[ids[i]], leading_edge_list[ids[j]])
-    }
-  }
-  return(w)
+  # ---- Build sparse incidence matrix ----
+  
+  all_genes <- unique(unlist(genesets))
+  
+  i <- rep(seq_along(genesets), lengths(genesets))
+  j <- match(unlist(genesets), all_genes)
+  
+  M <- sparseMatrix(
+    i = i,
+    j = j,
+    x = 1,
+    dims = c(length(genesets), length(all_genes)),
+    dimnames = list(names(genesets), all_genes)
+  )
+  
+  # ---- Pairwise intersections ----
+  # tcrossprod gives shared gene counts
+  
+  intersections <- tcrossprod(M)
+  
+  # ---- Set sizes ----
+  
+  sizes <- Matrix::rowSums(M)
+  
+  # ---- Pairwise unions ----
+  
+  unions <- outer(sizes, sizes, "+")
+  
+  # unions = |A| + |B| - |A∩B|
+  unions <- unions - as.matrix(intersections)
+  
+  # ---- Jaccard similarity ----
+  
+  jaccard <- as.matrix(intersections) / unions
+  
+  jaccard[lower.tri(jaccard,diag = TRUE)] <-NA
+  
+  return(jaccard)
 }
  
 
 # get graph of sim
-get_igraph <- function(res_fgsea, simmat,leading_edge_list,node_size=NULL,
+get_igraph <- function(res_fgsea, simmat,genesets,node_size=NULL,
                        pathway_names=NULL, min_edge=0.2, col.var=NULL) {
   if(any(duplicated(res_fgsea$pathway)))stop('error: duplicated pathways')
   
@@ -75,7 +113,7 @@ get_igraph <- function(res_fgsea, simmat,leading_edge_list,node_size=NULL,
   res_fgseaf<-res_fgsea[V(g)$name,on='pathway']
   #idx <- unlist(sapply(V(g)$name, function(x) which(x == res_fgseaf$pathway)))
   if(is.null(node_size)){
-    cnt <- sapply(leading_edge_list, length)
+    cnt <- sapply(genesets, length)
     
     V(g)$size <- cnt[V(g)$name]
   }else{
@@ -144,11 +182,15 @@ add_node_label <- function(p,label.size=label.size,max.overlaps=10) {
 
 
 FormatEnrichmentRes<-function(x,pathway_col=NULL){
+  x<-copy(x)
+  if(!is.null(pathway_col)){
+    
+    x[['pathway']]<-x[[pathway_col]]
+  }
+  
   if('n.overlap'%in%colnames(x)){
-    if(!is.null(pathway_col)){
-      x[,pathway:=.SD,.SDcols=pathway_col]
-      
-    }else{
+    if(is.null(pathway_col)){
+
       x[,pathway:=term]
       
     }
@@ -280,7 +322,7 @@ emmaplot<-function(res_fgsea,
                     pathway_names = pathway_names,
                     simmat = simat,
                     node_size =node_size ,
-                    leading_edge_list = lelist,
+                    genesets = lelist,
                     min_edge = min_edge,
                     col.var = col.var
     )
@@ -333,11 +375,10 @@ GetPathwaysLinks<-function(res_fgsea,
                    pathway_names=NULL,
                    show_pathway_of=NULL,
                    min_edge=0.2,pathway_col=NULL){
-  require('ggrepel')
-  
+
   res_fgsea<-FormatEnrichmentRes(res_fgsea,pathway_col = pathway_col)
   
-  if(is.null(pathway_names))pathway_names=res_fgsea[order(pval)]$pathway
+  if(is.null(pathway_names))pathway_names=unique(res_fgsea[order(pval)]$pathway)
   
   lelist<-LeadingEdges(res_fgsea[pathway%in%pathway_names])
   
@@ -359,7 +400,7 @@ GetPathwaysLinks<-function(res_fgsea,
     g <- get_igraph(res_fgsea = res_fgsea,
                     pathway_names = pathway_names,
                     simmat = simat,
-                    leading_edge_list = lelist,
+                    genesets = lelist,
                     min_edge = min_edge
     )
     pathways_links<-data.table(get.edgelist(g))
@@ -380,13 +421,14 @@ GetPathwaysLinks<-function(res_fgsea,
 ClusterPathways<-function(x,resolution=1,method='leiden',weights=NULL,min_edge=0.2,pathway_col=NULL){
   require(igraph)
   x<-FormatEnrichmentRes(x,pathway_col=pathway_col)
-  
+  pathway_col='pathway'
   if(length(unique(x$pathway))>1){
     if(is.null(weights)){
       if(!'weight'%in%colnames(x)){
         # if(is.null(min_edge)){
         #   min_edge=0.2
         # }
+        message('getting pathway links weight')
         links<-GetPathwaysLinks(x,min_edge = min_edge,pathway_col=pathway_col)
         
       }
