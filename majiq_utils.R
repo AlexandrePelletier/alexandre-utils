@@ -55,8 +55,7 @@ FormatVoilaHet<-function(res_voila,case_name,control_name,pval_thr=0.05){
     res_long[,dt_median_psi:=median_psi_case-median_psi_control]
     res_long[,diff_spliced:=abs(dt_median_psi)>0.1&WILCOXON<pval_thr&TTEST<pval_thr&TNOM<pval_thr]
     
-    res_long[,diff_spliced_relaxed:=abs(dt_median_psi)>0.05&sum(c(WILCOXON<pval_thr,TTEST<pval_thr,TNOM<pval_thr))>1,
-             by='lsv_id']
+    res_long[,diff_spliced_relaxed:=abs(dt_median_psi)>0.05&WILCOXON<pval_thr]
     
   
   

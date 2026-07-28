@@ -223,7 +223,7 @@ ht <- Heatmap(
       txt,
       x, y,
       gp = gpar(
-        fontsize = fontsize_number,
+        fontsize = ifelse(str_detect(val,'\\*'),fontsize_number,fontsize_number+8),
         col = "white"
       )
     )
@@ -257,6 +257,8 @@ CompDEGs<-function(res_des,
                    show_rownames=TRUE,
                    cluster_cols=TRUE,
                    show_pval=TRUE,
+                   asterisk_fontsize = 10,
+                   asterisk_color = 'white',
                    width =7,
                    height = 7){
   require('pheatmap')
@@ -304,8 +306,8 @@ CompDEGs<-function(res_des,
                   display_numbers = mat_dep,
                   cluster_cols = cluster_cols,
                   cellwidth =16,
-                  
-                  fontsize_number = 10))
+                  number_color = asterisk_color,
+                  fontsize_number = asterisk_fontsize))
   
 }
 

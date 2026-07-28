@@ -727,6 +727,10 @@ OR3<-function(querys,terms_list,background,
            by="term"]
     res_or[,padj:=p.adjust(pval,method = 'BH')]
     res_or[,fold.enrichment:=pct.query.overlap/pct.term.background]
+    res_or[,log2FE:=log2(fold.enrichment)]
+    res_or[,mlog10pval:=-log10(pval)]
+    res_or[,mlog10padj:=-log10(padj)]
+    
     if(overlap_column==TRUE){
       res_or[,genes.overlap:=paste(queryf[queryf%in%terms_listf[[term]]],collapse="|"),by="term"]
     }
@@ -1115,7 +1119,7 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,log_filechilds=NULL,proj_nam
     
     childs_dir<-file.path(scripts_dir,basename(filename)|>str_remove('.qsub$'))
     if(is.null(log_filechilds)){
-      childslog_dir<-file.path('logs',dirname(log_file),basename(logfile0)|>str_remove('.log$'))
+      childslog_dir<-file.path('logs',dirname(log_file),basename(log_file)|>str_remove('.log$'))
       
     }else{
       childslog_dir<-dirname(log_filechilds[1])
@@ -2165,3 +2169,21 @@ bgzip<-function(x,bgz_file=NULL,sort_coord=TRUE,col.names=TRUE,add_header_of=NUL
   invisible(bgz_file)
   
 }
+
+#Synapse interaction####
+getSynID<-function(synfolder){
+  require(synapser)
+  require(synapserutils)
+  
+  syn_mtd<-synapserutils::walk(synfolder)
+  
+  syn_mtd<-as.list(syn_mtd)
+  
+  syn_mtd<-rbindlist(lapply(syn_mtd[[1]][[3]], function(l){
+    return(data.table(filename=l[[1]],syn_id=l[[2]]))
+  }))
+  return(syn_mtd)
+}
+#example:
+# synfiles<-getSynID('syn7416949')
+# synfiles

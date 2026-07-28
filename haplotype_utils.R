@@ -1,4 +1,60 @@
 
+
+#getLocalHaplo: from topmed phased vcf.gz file, extract a region haplotype,returning a table the haplotype ID and SNPs for the 2 chromosomes of each sample
+#default QC: AF >2.5% & imputed R2>0.8
+# 
+getLocalHaplo<-function(vcf,region,samples_mtd,indiv_col='IID',min_AF=0.025,min_imput_R2=0.8){
+  
+  geno<-fread(paste('tabix -h',vcf,region,
+                    '|',"grep -v '##'"))
+  #QC
+  geno[,maf:=as.numeric(str_extract(INFO,'[0-9.e-]+'))]
+  geno[,R2:=as.numeric(str_remove(str_extract(INFO,'R2=[0-9.]+'),'R2='))]
+  geno[,genotyped:=str_detect(INFO,'ER2')]
+  message('Filtering SNPs: maf: ',round(min_AF*100,digits = 1),'%',', R2 imputation: ',min_imput_R2)
+  
+  genof<-geno[maf>min_AF&R2>min_imput_R2]
+  message(nrow(genof),' SNPs passing QC')
+  
+  genolong<-merge(genof[,1:8],melt(genof[,.SD,.SDcols = c(samples_mtd[[indiv_col]],'ID')],id.vars = 'ID',variable.name = indiv_col,value.name = 'genotype_info'))
+  genolong[,dose:=str_extract(genotype_info,'[01]\\|[01]')|>str_count('1')]
+  genolong<-merge(genolong,samples_mtd,by=indiv_col)
+  
+  genolong[,genotype:=strsplit(genotype_info,'\\:')[[1]][1],by=c(indiv_col,'POS','ID')]
+  
+  #then separate allele 1 and 2
+  genolong[,A1:=as.numeric(strsplit(genotype,'\\|')[[1]][1]),by=c(indiv_col,'POS','ID')]
+  genolong[,A2:=as.numeric(strsplit(genotype,'\\|')[[1]][2]),by=c(indiv_col,'POS','ID')]  
+  
+  homologs<-rbind(setnames(genolong[order(POS,ID),ifelse(A1==0,REF,ALT),by=c(indiv_col,'POS','ID')],'V1','SNP')[,haplot:='H1'],
+                  setnames(genolong[order(POS,ID),ifelse(A2==0,REF,ALT),by=c(indiv_col,'POS','ID')],'V1','SNP')[,haplot:='H2'])
+  homologs[,homolog_id:=paste(.SD[[1]],haplot,sep = '_'),.SDcols=indiv_col]
+  
+  # get an unique haplotype ID 
+  haplots<-rbind(genolong[order(POS,ID),list(haplo=paste(ifelse(A1==0,REF,ALT),collapse = '_')),by=indiv_col][,haplot:='H1'],
+                 genolong[order(POS,ID),list(haplo=paste(ifelse(A2==0,REF,ALT),collapse = '_')),by=indiv_col][,haplot:='H2'])
+  
+  haplo_ids=data.table(haplo=unique(haplots$haplo),
+                       haplo_id=paste0('haplo',1:length(unique(haplots$haplo))))
+  haplo_dt<-merge(haplots,haplo_ids)
+  haplo_dt
+  
+  homologs<-merge(homologs,haplo_dt[,-'haplo'])
+  
+  #add sample anno
+  
+  homologs<-merge(homologs,samples_mtd,by=indiv_col)
+  
+  #add SNP anno
+  homologs<-merge(homologs,genof[,1:8],by=c('ID','POS'))
+  homologs[,maf:=as.numeric(str_extract(INFO,'[0-9.e-]+'))]
+  homologs[,R2:=as.numeric(str_remove(str_extract(INFO,'R2=[0-9.]+'),'R2='))]
+  homologs[,genotyped:=str_detect(INFO,'ER2')]
+  
+  return(homologs)
+  
+}
+
 #getHaplo
 #get Haplotype from phased vcf table
 #Arguments:
@@ -69,8 +125,14 @@ GetHaplo<-function(vcf,haplo_ref=NULL){
 #hamming_distance
 #cmpute hamming distance (number of mismatch) for 2 string sequence of same size 
 hamming_distance<-function(x,y,sep=''){
-  vecx<-strsplit(x,sep)[[1]]
-  vecy<-strsplit(y,sep)[[1]]
+  if(length(x)==1){
+    vecx<-strsplit(x,sep)[[1]]
+    vecy<-strsplit(y,sep)[[1]]
+  }else{
+    vecx=x
+    vecy=y
+  }
+
   sum(vecx!=vecy)
 }
 #if consider indels, can use getDist of Alakazam
@@ -82,3 +144,82 @@ hamming_distance<-function(x,y,sep=''){
 #   vec<-strsplit(seq_with_underline,'_')[[1]]
 #   return(seq_with_dotgap)
 # }
+
+
+
+heatmapHaplo<-function(x,variant_col='ID',annotation_indiv=NULL,annotation_snp=NULL,display_SNP=NULL,cluster_rows=TRUE){
+  
+  nt_codes<-data.table(SNP=c("A","T","C","G"),
+                       snp_code=1:4)
+  
+  x<-merge(x,nt_codes,by='SNP')
+  
+  mtd_haplo<-unique(x,by='homolog_id')
+  toconv<-colnames(mtd_haplo)[sapply(mtd_haplo, is.logical)]
+  
+  if(length(toconv)>0){
+    setnames(mtd_haplo,toconv,paste0(toconv,'1'))
+    mtd_haplo[,(toconv):=lapply(.SD,as.numeric),.SDcols=paste0(toconv,'1')]    
+  }
+  
+  mtd_snps<-unique(x,by='ID')
+  toconv<-colnames(mtd_snps)[sapply(mtd_snps, is.logical)]
+  if(length(toconv)>0){
+    setnames(mtd_snps,toconv,paste0(toconv,'1'))
+    mtd_snps[,(toconv):=lapply(.SD,as.numeric),.SDcols=paste0(toconv,'1')]
+    
+  }
+  if(cluster_rows){
+    hamm_dist<-sapply(unique(x$homolog_id),function(h1){
+      sapply(unique(x$homolog_id), function(h2){
+        hamming_distance(x[h1,on='homolog_id'][order(POS)]$SNP,x[h2,on='homolog_id'][order(POS)]$SNP)
+        
+      })
+    })
+    hamm_dist<-as.dist(hamm_dist)
+    
+  }else{
+    hamm_dist='euclidean'
+  }
+
+  
+  haplo_map<-dcast(x,homolog_id~ID,value.var = 'snp_code')
+  haplo_snp<-dcast(x,homolog_id~ID,value.var = 'SNP')
+  
+  snps<-colnames(haplo_map)
+  if(is.null(display_SNP)){
+    display_SNP=length(snps)<60
+  }
+  if(display_SNP){
+    snpmat=data.frame(haplo_snp,row.names = 'homolog_id')[mtd_haplo$homolog_id,mtd_snps[order(POS)]$ID]
+  }else{
+    snpmat=FALSE 
+  }
+  
+  if(!is.null(annotation_indiv)){
+    
+    anno_homol=data.frame(mtd_haplo,row.names = 'homolog_id')[,annotation_indiv,drop=FALSE]
+  }else{
+    anno_homol=NA
+  }
+  
+  if(!is.null(annotation_snp)){
+    anno_snp=data.frame(mtd_snps,row.names = 'ID')[,annotation_snp,drop=FALSE]
+  }else{
+    anno_snp=NA
+  }
+  
+  pheatmap(data.frame(haplo_map,row.names = 'homolog_id')[mtd_haplo$homolog_id,mtd_snps[order(POS)]$ID],
+           color = c('green3','cyan2','orange3','coral1'),
+           annotation_row =anno_homol,
+           annotation_col =anno_snp,
+           cluster_cols  = F,border_color = 'grey',
+           cluster_rows = cluster_rows,
+           clustering_distance_rows=hamm_dist,
+           legend = TRUE, legend_breaks = c(1.5,2.25,3,3.75),legend_labels = c('A','T','C','G'),
+           show_colnames = T,
+           display_numbers =snpmat
+  )
+  
+  
+}

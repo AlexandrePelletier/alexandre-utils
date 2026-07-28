@@ -16,7 +16,8 @@ res_de<-Reduce(rbind,lapply(celltypes,function(ct){
 res_de[comparison=='KOvs33']
 res_de[cell_type=='Micro'][indiv=='Indiv1']
 fwrite(res_de,fp(out,'res_deseq2_APOE_isogenics.csv'))
-
+res_de<-fread(fp(out,'res_deseq2_APOE_isogenics.csv'))
+table(res_de[padj<0.05&abs(log2FoldChange)>0.5][,.(indiv,cell_type)])
 
 pop_path<-'/projectnb/tcwlab/Project/PopulationAPOE/JuliaNote/Analysis/Deseq2_GRSnoAPOE/'
 celltypes<-c('Astro','Micro','Neuro_composition','Neuro')
@@ -66,6 +67,12 @@ res_de_mouse<-res_de_pop
 fwrite(res_de_mouse,fp(out,'res_deseq2_APOE_Mouse.csv'))
 
 
+#scRNAseq
+resde<-fread('../projects/juao_autophagy/outputs/13-isogenics_analysis/res_sc_iso_44vs33_tcw1to3.csv.gz')
+table(resde$cell_type)
+
+fwrite(resde,fp(out,'res_deseq2_singlecell_MCC_isogenics_tcw1and2merged.csv'))
+
 #check some genes
 res_de<-fread(fp(out,'res_deseq2_APOE_isogenics.csv'))
 res_de[padj<0.1]
@@ -73,4 +80,7 @@ res_de[padj<0.1]
 res_de[gene_name%in%c('SERPINA3','LCN2','NGAL')]
 ENSG00000148346
 res_de[str_extract(V1,'ENSG[0-9]+')=='ENSG00000148346']
+
+
+
 
