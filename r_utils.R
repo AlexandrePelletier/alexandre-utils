@@ -696,6 +696,7 @@ OR3<-function(querys,terms_list,background,
     
     return(dt[,query.:=query][,.SD,.SDcols=c(ncol(dt),1:(ncol(dt)-1))])
   }else{
+    background<-unique(background)
     queryf<-intersect(querys,background)
     terms_listf<-lapply(terms_list,function(x)intersect(x,background))
     res_or<-data.table(term=names(terms_listf),term.size=sapply(terms_listf,length))
@@ -1069,7 +1070,7 @@ fwritevcf<-function(x,file,header,add_to_header=NULL){
 #QSUB FILES CREATION####
 
 
-CreateJobFile<-function(cmd_list,file,log_file=NULL,log_filechilds=NULL,proj_name='tcwlab-adsp',modules=NULL,
+CreateJobFile<-function(cmd_list,file,log_file=NULL,log_filechilds=NULL,proj_name='tcwlab',modules=NULL,
                         loadBashrc=FALSE,conda_env=NULL,
                         micromamba_env=NULL,
                         cwd='.',
@@ -1455,7 +1456,7 @@ CreateJobForPyfile<-function(py_file,qsub_file=NULL,args=NULL,
   
 }
 
-shorten<-function(x,width=20)make.names(str_trunc(basename(str_remove(unlist(x),'^[0-9A-Za-z]+-')),width = width,ellipsis = ''))
+shorten<-function(x,width=20)make.names(str_trunc(str_remove(basename(unlist(x)),'^[0-9A-Za-z]+-'),width = width,ellipsis = ''))
 
 #firstdiffchars: identify the first different character between element of a character vector
 firstdiffchars<- function(x) {
@@ -1477,11 +1478,31 @@ LogFileNames<-function(logfile0,args){
   
   outlog<-file.path(dirname(logfile0),basename(logfile0)|>str_remove('.log$'))
   dir.create(outlog,showWarnings = FALSE)
-  diffcharpos<-firstdiffchars(basename(str_remove(unlist(args[[1]]),'^[0-9A-Za-z]+-')))
-  logs<-sapply(1:length(args[[1]]), function(i){
-    arg1<-basename(str_remove(unlist(args[[1]][i]),'^[0-9A-Za-z]+-'))
+  if(length(args[[1]])>1){
+    diffcharpos<-firstdiffchars(basename(str_remove(unlist(args[[1]]),'^[0-9A-Za-z]+-')))
     
-    params_name<-paste0(shorten(substr(arg1,max(c(diffcharpos-5,1)),str_length(arg1))),'_',i)
+    logs<-sapply(1:length(args[[1]]), function(i){
+      arg1<-basename(str_remove(unlist(args[[1]][i]),'^[0-9A-Za-z]+-'))
+      
+      params_name<-paste0(shorten(substr(arg1,max(c(diffcharpos-5,1)),str_length(arg1))),'_',i)
+      
+      j<-1
+      while(length(args)>j){
+        j<-j+1
+        argsup<-args[[j]]
+        
+        params_name<-paste(params_name,shorten(argsup),sep='_')
+        
+      }
+      
+      
+      log_filearg<-file.path(outlog,paste0(params_name,'.log'))
+      
+      return(log_filearg)
+    })
+  }else{
+
+    params_name<-shorten(args[[1]])
     
     j<-1
     while(length(args)>j){
@@ -1493,10 +1514,10 @@ LogFileNames<-function(logfile0,args){
     }
     
     
-    log_filearg<-file.path(outlog,paste0(params_name,'.log'))
+    logs<-file.path(outlog,paste0(params_name,'.log'))
     
-    return(log_filearg)
-  })
+  }
+  
   
   return(logs)
 }
@@ -1511,7 +1532,7 @@ LogFileNames<-function(logfile0,args){
 
 CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
                             parallelize=NULL,maxChildJobs=60,
-                            proj_name='tcwlab-adsp',
+                            proj_name='tcwlab',
                             modules='R/4.4.3',
                             loadBashrc=FALSE,conda_env=NULL,micromamba_env=NULL,
                             nThreads=4,memPerCore=NULL,maxHours=24,
@@ -1520,6 +1541,7 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
   if(is.null(parallelize)){
     parallelize=FALSE
     if(!is.null(args)){
+      args<-lapply(args, as.character)
       if(length(args[[1]])>1){
         parallelize=TRUE
       }
@@ -1537,12 +1559,13 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
       qsub_file<-paste0(str_remove(r_file,'\\.R$'),paste(shorten(args[2:length(args)]),collapse = '_'),'.qsub')
       
     }else if(length(args)>1&length(args[[1]])==1){
-      qsub_file<-paste0(str_remove(r_file,'\\.R$'),shorten(args[1:length(args)]),'.qsub')
+      qsub_file<-paste0(str_remove(r_file,'\\.R$'),paste(shorten(args[1:length(args)]),collapse = '_'),'.qsub')
       
     }else{
       qsub_file<-str_replace(r_file,'\\.R$','.qsub')
       
     }
+    message('creating ',qsub_file)
     }
   
   filename<-basename(qsub_file)
@@ -1588,7 +1611,6 @@ CreateJobForRfile<-function(r_file,qsub_file=NULL,args=NULL,
   #show the first R lines
   message('the 15 firsts R lines to executes')
   system(paste('head -n 15',r_file))
-  
   #pass the argument to createJobFile
   CreateJobFile(cmds,file = qsub_file,log_file = log_file,
                 log_filechilds = log_filechilds,
