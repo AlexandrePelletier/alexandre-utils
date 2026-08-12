@@ -112,7 +112,7 @@ SplicingDeficiency<-function(introns_count,exons_count,out_dir){
   counts[,count.norm:=count/length]
   counts[,transcript_id:=str_extract(ID,'ENST[0-9]+')]
   counts[,splic.def:=sum(count.norm[type=='intron'])/sum(count.norm[type=='exon']),by=c('transcript_id')]
-  
+
   splic_def<-unique(counts[,.(splic.def,transcript_id)])
   return(splic_def)
   

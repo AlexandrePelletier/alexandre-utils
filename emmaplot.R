@@ -224,7 +224,7 @@ emmaplot<-function(res_fgsea,
                    simat=NULL,
                    min_edge=0.2,
                    label.size=2.5,
-                   cols=c('blue','white','red'),
+                   cols=c('blue3','white','red3'),
                    max.overlaps=10,cols_lims=NULL){
   if(!is.null(group.by)){
     

@@ -1120,7 +1120,7 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,log_filechilds=NULL,proj_nam
     
     childs_dir<-file.path(scripts_dir,basename(filename)|>str_remove('.qsub$'))
     if(is.null(log_filechilds)){
-      childslog_dir<-file.path('logs',dirname(log_file),basename(log_file)|>str_remove('.log$'))
+      childslog_dir<-file.path(dirname(log_file),basename(log_file)|>str_remove('.log$'))
       
     }else{
       childslog_dir<-dirname(log_filechilds[1])
@@ -1143,7 +1143,7 @@ CreateJobFile<-function(cmd_list,file,log_file=NULL,log_filechilds=NULL,proj_nam
       if(!is.null(names(cmd_list))){
         child_jobnames<-make.names(names(cmd_list))
       }else{
-        child_jobnames<-paste0(basename(filename),'_child',1:length(cmd_list))
+        child_jobnames<-paste0(basename(filename)|>tools::file_path_sans_ext(),'_child',1:length(cmd_list))
       }
     
     child_jobfiles<-file.path(childs_dir,paste0(child_jobnames,'.qsub'))
@@ -1785,11 +1785,11 @@ bed_inter<- function(a, b, opt1="-wa",
 
 #outputs : bed file <bed_file_name>.<genomics_regions_name>.overlap.count.bed.gz of the number of read falling in each genomic region
 CountBEDOverlap<-function(bed_files,genomic_regions_file,
-                          out_dir=NULL,job_file='X-count_bed_overlap.qsub',
-                          job_name = 'countbedoverlap',
+                          out_dir=NULL,job_file=NULL,
+                          job_name = NULL,
                           write_genomic_regions=TRUE, write_bed_file_intervals=FALSE,
                           nThreads=NULL,parallelize=F,
-                          maxChildJobs=40,wait_job=TRUE,
+                          maxChildJobs=40,wait_job=FALSE,
                           wait_for=NULL,dryrun=FALSE){
   bed_dir=unique(dirname(bed_files))
   if(is.null(out_dir)){
@@ -1828,13 +1828,12 @@ CountBEDOverlap<-function(bed_files,genomic_regions_file,
     
   }else{
     
-    CreateJobFile(cmds,file = job_file,
-                  loadBashrc = T,modules = c('bedtools'),
+    qsub<-CreateJobFile(cmds,file = job_file,modules = c('bedtools'),
                   nThreads = nThreads,parallelize =parallelize,
                   maxChildJobs=maxChildJobs)
     
     if(!dryrun){
-      jobid<-RunQsub(job_file,job_name = job_name,wait_for = wait_for)
+      jobid<-RunQsub(qsub,job_name = job_name,wait_for = wait_for)
       
       if(wait_job)WaitQsub(job_file,jobid =jobid )
       
